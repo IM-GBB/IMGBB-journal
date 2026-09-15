@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b0d10;
+  --panel: #14181e;
+  --line: #2a313c;
+  --text: #e8edf4;
+  --muted: #8b95a5;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+input,
+select,
+button,
+textarea {
+  font: inherit;
+}
