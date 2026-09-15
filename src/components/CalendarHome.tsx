@@ -59,6 +59,8 @@ export default function CalendarHome() {
   const [year, setYear] = useState(today.slice(0, 4));
   const [month, setMonth] = useState(today.slice(0, 7));
   const [week, setWeek] = useState(0);
+  const [syncMsg, setSyncMsg] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/overview")
@@ -132,20 +134,65 @@ export default function CalendarHome() {
   const maxV = Math.max(0, ...chartPoints.map((p) => p.value));
   const span = Math.max(1, maxV - minV);
 
+  async function syncMonth() {
+    const todayKey = kstDateKey();
+    const last = month === todayKey.slice(0, 7) ? Number(todayKey.slice(8, 10)) : count;
+    const dates: string[] = [];
+    for (let d = 1; d <= last; d++) {
+      dates.push(`${month}-${String(d).padStart(2, "0")}`);
+    }
+    setSyncBusy(true);
+    setSyncMsg("");
+    let ok = 0;
+    let added = 0;
+    for (let i = 0; i < dates.length; i++) {
+      setSyncMsg(`${dates[i]} 동기화 중… ${i + 1}/${dates.length}`);
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: dates[i] }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        ok += 1;
+        added += json.synced || 0;
+      } else {
+        setSyncMsg(json.error || `${dates[i]} 실패`);
+        setSyncBusy(false);
+        return;
+      }
+    }
+    setSyncBusy(false);
+    setSyncMsg(`${ok}일 동기화 완료 · 신규/갱신 ${added}건`);
+    const ov = await fetch("/api/overview").then((r) => r.json());
+    setDays(ov.days || []);
+    setCurve(ov.curve || []);
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
       <p className="text-sm text-[#8b95a5]">OKX Journal</p>
       <h1 className="mt-1 text-3xl font-semibold">
         {y}년 {m}월
       </h1>
-      <p className="mt-2 text-sm text-[#8b95a5]">매매 기록이 있는 날짜만 선택할 수 있습니다. 오늘은 {today}.</p>
+      <p className="mt-2 text-sm text-[#8b95a5]">빈 날짜도 열 수 있습니다. 오늘은 {today}.</p>
 
-      <button
-        onClick={() => setChartOpen((v) => !v)}
-        className="mt-4 rounded-lg border border-[#2a313c] bg-[#14181e] px-4 py-2 text-sm"
-      >
-        {chartOpen ? "차트 닫기" : "차트 열기"}
-      </button>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setChartOpen((v) => !v)}
+          className="rounded-lg border border-[#2a313c] bg-[#14181e] px-4 py-2 text-sm"
+        >
+          {chartOpen ? "차트 닫기" : "차트 열기"}
+        </button>
+        <button
+          onClick={syncMonth}
+          disabled={syncBusy}
+          className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm text-[#0b0d10] disabled:opacity-50"
+        >
+          {syncBusy ? "동기화 중…" : "이번 달 동기화"}
+        </button>
+      </div>
+      {syncMsg ? <p className="mt-2 text-sm text-[#f0c674]">{syncMsg}</p> : null}
 
       {chartOpen ? (
         <section className="mt-3 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
@@ -277,7 +324,7 @@ export default function CalendarHome() {
           const key = `${y}-${String(m).padStart(2, "0")}-${day}`;
           const st = byDate.get(key);
           const inWeek = week === 0 || weekOfMonth(key) === week;
-                  if (!st) {
+          if (!st) {
             return (
               <Link
                 key={key}
