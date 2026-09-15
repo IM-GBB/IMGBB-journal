@@ -5,14 +5,19 @@ import type { Trade } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") || kstDateKey();
-  if (!isValidDateKey(date)) return NextResponse.json({ error: "날짜 형식 오류" }, { status: 400 });
-  return NextResponse.json({ trades: listTrades(date), stats: dayStats(date) });
+  if (!isValidDateKey(date)) {
+    return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
+  }
+  return NextResponse.json({
+    trades: await listTrades(date),
+    stats: await dayStats(date),
+  });
 }
 
 export async function PATCH(req: NextRequest) {
   const body = (await req.json()) as { id?: string; memo?: string };
-  if (!body.id) return NextResponse.json({ error: "id 필요" }, { status: 400 });
-  const trade = updateMemo(body.id, body.memo ?? "");
+  if (!body.id) return NextResponse.json({ error: "id 필수" }, { status: 400 });
+  const trade = await updateMemo(body.id, body.memo ?? "");
   if (!trade) return NextResponse.json({ error: "없음" }, { status: 404 });
   return NextResponse.json({ trade });
 }
@@ -20,10 +25,10 @@ export async function PATCH(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const b = (await req.json()) as Partial<Trade> & { dateKst?: string };
   if (!b.dateKst || !isValidDateKey(b.dateKst) || !b.instId) {
-    return NextResponse.json({ error: "dateKst, instId 필요" }, { status: 400 });
+    return NextResponse.json({ error: "dateKst, instId 필수" }, { status: 400 });
   }
   const net = Number(b.netPnl ?? 0);
-  const trade: Trade = {
+  const trade = {
     id: `manual:${Date.now()}`,
     dateKst: b.dateKst,
     closedAt: b.closedAt || new Date().toISOString(),
@@ -42,6 +47,6 @@ export async function POST(req: NextRequest) {
     win: net > 0,
     memo: b.memo || "",
     source: "manual",
-  };
-  return NextResponse.json({ trade: addManual(trade) });
+  } as Trade;
+  return NextResponse.json({ trade: await addManual(trade) });
 }

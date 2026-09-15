@@ -1,62 +1,80 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
+import { neon } from "@neondatabase/serverless";
 import type { DayStats, Trade } from "./types";
 
-const DATA_DIR = join(process.cwd(), "data");
-const FILE = join(DATA_DIR, "journal.json");
+const sql = neon(process.env.DATABASE_URL!);
 
-type DB = { trades: Trade[] };
-
-function load(): DB {
-  if (!existsSync(FILE)) return { trades: [] };
-  try {
-    return JSON.parse(readFileSync(FILE, "utf8")) as DB;
-  } catch {
-    return { trades: [] };
-  }
+export async function listTrades(dateKst?: string): Promise<Trade[]> {
+  const rows = dateKst
+    ? await sql`select * from trades where date_kst = ${dateKst} order by closed_at asc`
+    : await sql`select * from trades order by closed_at asc`;
+  return rows.map(rowToTrade);
 }
 
-function save(db: DB) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(FILE, JSON.stringify(db, null, 2), "utf8");
-}
-
-export function listTrades(dateKst?: string): Trade[] {
-  const trades = load().trades;
-  const filtered = dateKst ? trades.filter((t) => t.dateKst === dateKst) : trades;
-  return filtered.sort((a, b) => a.closedAt.localeCompare(b.closedAt));
-}
-
-export function upsertTrades(incoming: Trade[]): Trade[] {
-  const db = load();
-  const byId = new Map(db.trades.map((t) => [t.id, t]));
+export async function upsertTrades(incoming: Trade[]): Promise<Trade[]> {
   for (const t of incoming) {
-    const prev = byId.get(t.id);
-    byId.set(t.id, prev ? { ...t, memo: prev.memo || t.memo } : t);
+    const prev = (await sql`select memo from trades where id = ${t.id}`)[0];
+    await sql`
+      insert into trades (
+        id, date_kst, inst_id, side, leverage,
+        realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at
+      )
+      values (
+        ${t.id}, ${t.dateKst}, ${t.instId}, ${t.side}, ${t.leverage},
+        ${t.realizedPnl}, ${t.fee}, ${t.fundingFee}, ${t.netPnl}, ${t.win},
+        ${prev?.memo || t.memo || ""}, ${t.closedAt}
+      )
+      on conflict (id) do update set
+        date_kst = excluded.date_kst,
+        inst_id = excluded.inst_id,
+        side = excluded.side,
+        leverage = excluded.leverage,
+        realized_pnl = excluded.realized_pnl,
+        fee = excluded.fee,
+        funding_fee = excluded.funding_fee,
+        net_pnl = excluded.net_pnl,
+        win = excluded.win,
+        closed_at = excluded.closed_at
+    `;
   }
-  db.trades = [...byId.values()];
-  save(db);
   return incoming;
 }
 
-export function updateMemo(id: string, memo: string): Trade | null {
-  const db = load();
-  const i = db.trades.findIndex((t) => t.id === id);
-  if (i < 0) return null;
-  db.trades[i] = { ...db.trades[i], memo };
-  save(db);
-  return db.trades[i];
+export async function updateMemo(id: string, memo: string): Promise<Trade | null> {
+  const rows = await sql`
+    update trades set memo = ${memo} where id = ${id} returning *
+  `;
+  return rows[0] ? rowToTrade(rows[0]) : null;
 }
 
-export function addManual(trade: Trade): Trade {
-  const db = load();
-  db.trades.push(trade);
-  save(db);
+export async function addManual(trade: Trade): Promise<Trade> {
+  await sql`
+    insert into trades (
+      id, date_kst, inst_id, side, leverage,
+      realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at
+    )
+    values (
+      ${trade.id}, ${trade.dateKst}, ${trade.instId}, ${trade.side}, ${trade.leverage},
+      ${trade.realizedPnl}, ${trade.fee}, ${trade.fundingFee}, ${trade.netPnl}, ${trade.win},
+      ${trade.memo ?? ""}, ${trade.closedAt}
+    )
+    on conflict (id) do update set
+      date_kst = excluded.date_kst,
+      inst_id = excluded.inst_id,
+      side = excluded.side,
+      leverage = excluded.leverage,
+      realized_pnl = excluded.realized_pnl,
+      fee = excluded.fee,
+      funding_fee = excluded.funding_fee,
+      net_pnl = excluded.net_pnl,
+      win = excluded.win,
+      memo = excluded.memo,
+      closed_at = excluded.closed_at
+  `;
   return trade;
 }
 
-export function dayStats(dateKst: string): DayStats {
-  const trades = listTrades(dateKst);
+export async function dayStats(dateKst: string): Promise<DayStats> {
+  const trades = await listTrades(dateKst);
   const wins = trades.filter((t) => t.win).length;
   const levers = trades.map((t) => t.leverage).filter((n): n is number => n != null && n > 0);
   const net = trades.reduce((s, t) => s + t.netPnl, 0);
@@ -74,7 +92,24 @@ export function dayStats(dateKst: string): DayStats {
   };
 }
 
-export function allDayStats(): DayStats[] {
-  const dates = [...new Set(load().trades.map((t) => t.dateKst))].sort();
-  return dates.map(dayStats);
+export async function allDayStats(): Promise<DayStats[]> {
+  const rows = await sql`select distinct date_kst from trades order by date_kst asc`;
+  return Promise.all(rows.map((r) => dayStats(String(r.date_kst))));
+}
+
+function rowToTrade(r: any): Trade {
+  return {
+    id: r.id,
+    dateKst: r.date_kst,
+    instId: r.inst_id,
+    side: r.side,
+    leverage: r.leverage,
+    realizedPnl: Number(r.realized_pnl ?? 0),
+    fee: Number(r.fee ?? 0),
+    fundingFee: Number(r.funding_fee ?? 0),
+    netPnl: Number(r.net_pnl ?? 0),
+    win: Boolean(r.win),
+    memo: r.memo,
+    closedAt: r.closed_at,
+  } as Trade;
 }
