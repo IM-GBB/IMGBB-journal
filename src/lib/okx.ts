@@ -69,7 +69,12 @@ export async function syncDay(dateKst: string): Promise<Trade[]> {
     throw new Error("이 날짜는 OKX API 3개월 창 밖입니다. CSV로 넣으세요.");
   }
 
-  const instTypes = (process.env.OKX_INST_TYPES || "SWAP,FUTURES").split(",").map((s) => s.trim());
+  const ALLOWED = new Set(["SWAP", "FUTURES", "MARGIN", "OPTION"]);
+const instTypes = (process.env.OKX_INST_TYPES || "SWAP")
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter((s) => ALLOWED.has(s));
+if (!instTypes.length) instTypes.push("SWAP");
   const collected: PosHist[] = [];
 
   for (const instType of instTypes) {
