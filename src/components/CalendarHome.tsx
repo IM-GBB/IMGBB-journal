@@ -277,11 +277,17 @@ export default function CalendarHome() {
           const key = `${y}-${String(m).padStart(2, "0")}-${day}`;
           const st = byDate.get(key);
           const inWeek = week === 0 || weekOfMonth(key) === week;
-          if (!st) {
+                  if (!st) {
             return (
-              <div key={key} className="rounded-lg border border-[#1b2028] px-2 py-3 text-sm text-[#3a4250]">
+              <Link
+                key={key}
+                href={`/journal/${key}`}
+                className={`rounded-lg border border-[#1b2028] px-2 py-3 text-sm text-[#5b6472] ${
+                  !inWeek ? "opacity-40" : ""
+                }`}
+              >
                 {i + 1}
-              </div>
+              </Link>
             );
           }
           const win = st.netPnl > 0;
