@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     memo: b.memo || "",
     tags: b.tags || "",
     rating: b.rating ?? null,
-    source: "manual",
-  } as Trade;
+    source: "manual" as const,
+  };
   return NextResponse.json({ trade: await addManual(trade) });
 }

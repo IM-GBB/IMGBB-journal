@@ -53,11 +53,13 @@ export async function updateTradeMeta(
   id: string,
   patch: { memo?: string; tags?: string; rating?: number | null }
 ): Promise<Trade | null> {
+  const cur = (await sql`select * from trades where id = ${id}`)[0];
+  if (!cur) return null;
+  const memo = patch.memo ?? cur.memo ?? "";
+  const tags = patch.tags ?? cur.tags ?? "";
+  const rating = patch.rating === undefined ? cur.rating : patch.rating;
   const rows = await sql`
-    update trades set
-      memo = coalesce(${patch.memo ?? null}, memo),
-      tags = coalesce(${patch.tags ?? null}, tags),
-      rating = coalesce(${patch.rating ?? null}, rating)
+    update trades set memo = ${memo}, tags = ${tags}, rating = ${rating}
     where id = ${id}
     returning *
   `;
