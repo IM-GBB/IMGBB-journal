@@ -148,7 +148,35 @@ export async function getEquityUsd(): Promise<number | null> {
   const n = Number(data?.[0]?.totalEq);
   return Number.isFinite(n) ? n : null;
 }
-
+export async function fetchDayRebate(dateKst: string, feeSum: number): Promise<number> {
+  const { begin, end } = kstRangeUtcMs(dateKst);
+  let after = "";
+  let sum = 0;
+  try {
+    for (let page = 0; page < 10; page++) {
+      const q = `/api/v5/asset/bills?limit=100${after ? `&after=${after}` : ""}`;
+      const rows = await okxGet<{ type?: string; ts?: string; balChg?: string; billId?: string; notes?: string }[]>(q);
+      if (!rows.length) break;
+      for (const row of rows) {
+        const ts = Number(row.ts || 0);
+        if (ts < begin || ts >= end) continue;
+        const typ = String(row.type || "");
+        const note = String(row.notes || "").toLowerCase();
+        const amt = Number(row.balChg || 0);
+        if (typ === "300" || typ === "173" || typ === "68" || note.includes("rebate")) {
+          if (amt > 0) sum += amt;
+        }
+      }
+      after = String(rows[rows.length - 1]?.billId || "");
+      const oldest = Number(rows[rows.length - 1]?.ts || 0);
+      if (!after || oldest < begin) break;
+    }
+  } catch {
+    sum = 0;
+  }
+  if (sum > 0) return sum;
+  return Math.abs(feeSum) * 0.2;
+}
 export function okxConfigured(): boolean {
   return creds().ready;
 }

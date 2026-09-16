@@ -6,6 +6,12 @@ const sql = neon(process.env.DATABASE_URL!);
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") || "";
+  if (!date) {
+    const rows = await sql`select date_kst, note from day_notes where note is not null and note <> '' order by date_kst desc`;
+    return NextResponse.json({
+      notes: rows.map((r) => ({ date: String(r.date_kst), note: String(r.note || "") })),
+    });
+  }
   if (!isValidDateKey(date)) {
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
   }

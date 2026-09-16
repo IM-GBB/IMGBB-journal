@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidDateKey } from "@/lib/kst";
-import { okxConfigured, syncDay } from "@/lib/okx";
+import { fetchDayRebate, okxConfigured, syncDay } from "@/lib/okx";
+import { upsertRebate } from "@/lib/rebate";
 import { dayStats, upsertTrades } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
@@ -15,10 +16,14 @@ export async function POST(req: NextRequest) {
   try {
     const incoming = await syncDay(date);
     await upsertTrades(incoming);
+    const stats = await dayStats(date);
+    const rebate = await fetchDayRebate(date, stats.fee);
+    await upsertRebate(date, rebate);
     return NextResponse.json({
       synced: incoming.length,
       trades: incoming,
-      stats: await dayStats(date),
+      stats,
+      rebate,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "동기화 실패";

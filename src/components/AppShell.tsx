@@ -10,11 +10,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const items = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/", label: "Day View" },
-    { href: "/trades", label: "Trade View" },
     { href: "/notebook", label: "Notebook" },
-    { href: "/reports", label: "Reports" },
-    { href: "/strategies", label: "Strategies" },
-    { href: "/progress", label: "Progress Tracker" },
+    { href: "/progress", label: "Progress" },
     { href: "/stock", label: "Stock Journal" },
   ];
 
