@@ -5,24 +5,24 @@ import Link from "next/link";
 import { shiftDate } from "@/lib/kst";
 import type { DayStats, Trade } from "@/lib/types";
 
-function won(n: number, digits = 2) {
+function won(n: number) {
   const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toLocaleString(undefined, { maximumFractionDigits: digits })}`;
+  return `${sign}${n.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
 }
 
-function symbolOf(instId: string) {
-  return instId.replace("-SWAP", " Perpetual").replace(/-/g, "");
+function roi(t: Trade) {
+  if (t.openAvgPx && t.size && t.leverage) {
+    const margin = (t.size * t.openAvgPx) / t.leverage;
+    if (margin) return (t.netPnl / margin) * 100;
+  }
+  return null;
 }
 
-function fmtTime(iso?: string | null) {
-  if (!iso) return "—";
+function hhmm(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -30,27 +30,15 @@ function fmtTime(iso?: string | null) {
   }).format(d);
 }
 
-function pnlPct(t: Trade) {
-  if (t.openAvgPx && t.size && t.leverage) {
-    const margin = (t.size * t.openAvgPx) / t.leverage;
-    if (margin) return (t.netPnl / margin) * 100;
-  }
-  if (t.openAvgPx && t.closeAvgPx) {
-    const dir = t.side === "short" ? -1 : 1;
-    return ((t.closeAvgPx - t.openAvgPx) / t.openAvgPx) * dir * (t.leverage || 1) * 100;
-  }
-  return null;
-}
-
 export default function DayJournal({ date }: { date: string }) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [stats, setStats] = useState<DayStats | null>(null);
-  const [equity, setEquity] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [configured, setConfigured] = useState(false);
-  const [chartOpen, setChartOpen] = useState(false);
   const [form, setForm] = useState({ instId: "BTC-USDT-SWAP", side: "long", leverage: "10", netPnl: "", memo: "" });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ memo: "", tags: "", rating: 0 });
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/trades?date=${date}`);
@@ -61,9 +49,21 @@ export default function DayJournal({ date }: { date: string }) {
 
   useEffect(() => {
     load();
-    fetch("/api/sync").then((r) => r.json()).then((j) => setConfigured(Boolean(j.configured)));
-    fetch("/api/account").then((r) => r.json()).then((j) => setEquity(j.equityUsd ?? null));
+    fetch("/api/sync")
+      .then((r) => r.json())
+      .then((j) => setConfigured(Boolean(j.configured)));
   }, [load]);
+
+  const selected = useMemo(() => trades.find((t) => t.id === openId) || null, [trades, openId]);
+
+  function openPanel(t: Trade) {
+    setOpenId(t.id);
+    setDraft({
+      memo: t.memo || "",
+      tags: t.tags || "",
+      rating: t.rating || 0,
+    });
+  }
 
   async function syncDay() {
     setBusy(true);
@@ -83,12 +83,19 @@ export default function DayJournal({ date }: { date: string }) {
     await load();
   }
 
-  async function saveMemo(id: string, memo: string) {
+  async function saveMeta() {
+    if (!openId) return;
     await fetch("/api/trades", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, memo }),
+      body: JSON.stringify({
+        id: openId,
+        memo: draft.memo,
+        tags: draft.tags,
+        rating: draft.rating || null,
+      }),
     });
+    await load();
   }
 
   async function addManual(e: React.FormEvent) {
@@ -111,42 +118,38 @@ export default function DayJournal({ date }: { date: string }) {
 
   const points = useMemo(() => {
     let c = 0;
-    return trades.map((t, i) => {
+    return trades.map((t) => {
       c += t.netPnl;
-      return { i, c };
+      return c;
     });
   }, [trades]);
-  const maxAbs = Math.max(1, ...points.map((p) => Math.abs(p.c)));
-  const todayPnl = stats?.netPnl ?? 0;
-  const todayPct = equity && equity > 0 ? (todayPnl / equity) * 100 : null;
+  const maxAbs = Math.max(1, ...points.map((p) => Math.abs(p)));
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/" className="text-sm text-[#8b95a5]">← 달력</Link>
+          <Link href="/" className="text-sm text-[#8b95a5]">
+            ← Day View
+          </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">{date}</h1>
         </div>
         <div className="flex gap-2">
-          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">이전</Link>
-          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">다음</Link>
-          <button onClick={syncDay} disabled={busy} className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm font-medium text-[#0b0d10] disabled:opacity-50">
+          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">
+            이전
+          </Link>
+          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">
+            다음
+          </Link>
+          <button
+            onClick={syncDay}
+            disabled={busy}
+            className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm font-medium text-[#0b0d10] disabled:opacity-50"
+          >
             {busy ? "동기화 중…" : "이 날만 동기화"}
           </button>
         </div>
       </header>
-
-      <section className="mb-6">
-        <div className="text-xs text-[#8b95a5]">Estimated total value</div>
-        <div className="mt-1 text-4xl font-semibold tracking-tight">
-          {equity != null ? equity.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
-          <span className="ml-2 text-base font-normal text-[#8b95a5]">USD</span>
-        </div>
-        <div className={`mt-1 text-sm ${todayPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
-          Today&apos;s PnL {won(todayPnl)}
-          {todayPct != null ? ` (${won(todayPct)}%)` : ""}
-        </div>
-      </section>
 
       {msg ? <p className="mb-4 text-sm text-[#f0c674]">{msg}</p> : null}
       {!configured ? (
@@ -155,37 +158,7 @@ export default function DayJournal({ date }: { date: string }) {
         </p>
       ) : null}
 
-      <button
-        onClick={() => setChartOpen((v) => !v)}
-        className="mb-3 rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm"
-      >
-        {chartOpen ? "누적 순손익 차트 닫기" : "누적 순손익 차트 열기"}
-      </button>
-
-      {chartOpen ? (
-        <section className="mb-4 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
-          <div className="mb-2 text-sm text-[#8b95a5]">당일 누적 순손익</div>
-          <svg viewBox="0 0 400 120" className="h-28 w-full">
-            <line x1="0" y1="60" x2="400" y2="60" stroke="#2a313c" />
-            {points.length > 0 ? (
-              <polyline
-                fill="none"
-                stroke={todayPnl >= 0 ? "#3dd68c" : "#f07178"}
-                strokeWidth="2"
-                points={points
-                  .map((p, idx) => {
-                    const x = (idx / Math.max(points.length - 1, 1)) * 400;
-                    const y = 60 - (p.c / maxAbs) * 50;
-                    return `${x},${y}`;
-                  })
-                  .join(" ")}
-              />
-            ) : null}
-          </svg>
-        </section>
-      ) : null}
-
-      <section className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-5">
+      <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
           ["거래", stats ? String(stats.trades) : "—"],
           ["승률", stats ? `${(stats.winRate * 100).toFixed(0)}%` : "—"],
@@ -193,55 +166,70 @@ export default function DayJournal({ date }: { date: string }) {
           ["수수료", stats ? won(stats.fee) : "—"],
           ["평균레버", stats?.avgLeverage != null ? `${stats.avgLeverage.toFixed(1)}x` : "—"],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2">
-            <div className="text-[11px] text-[#8b95a5]">{k}</div>
-            <div className="mt-0.5 text-sm font-medium">{v}</div>
+          <div key={k} className="rounded-xl border border-[#2a313c] bg-[#14181e] px-4 py-3">
+            <div className="text-xs text-[#8b95a5]">{k}</div>
+            <div className="mt-1 text-lg font-medium">{v}</div>
           </div>
         ))}
       </section>
 
+      <section className="mb-6 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
+        <div className="mb-2 text-sm text-[#8b95a5]">당일 누적 순손익</div>
+        <svg viewBox="0 0 400 120" className="h-28 w-full">
+          <line x1="0" y1="60" x2="400" y2="60" stroke="#2a313c" />
+          {points.length > 0 ? (
+            <polyline
+              fill="none"
+              stroke="#3dd68c"
+              strokeWidth="2"
+              points={points
+                .map((c, idx) => {
+                  const x = (idx / Math.max(points.length - 1, 1)) * 400;
+                  const y = 60 - (c / maxAbs) * 50;
+                  return `${x},${y}`;
+                })
+                .join(" ")}
+            />
+          ) : null}
+        </svg>
+      </section>
+
       <div className="overflow-x-auto rounded-xl border border-[#2a313c]">
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-[#14181e] text-[#8b95a5]">
             <tr>
-              {["Symbol", "Status", "Entry", "Exit", "Realized PnL", "PnL %", "Closed", "Lev", "Time closed", "Memo"].map((h) => (
-                <th key={h} className="px-3 py-2 font-medium">{h}</th>
+              {["시간", "상품", "방향", "레버", "진입", "청산", "순손익", "ROI", "승패"].map((h) => (
+                <th key={h} className="px-3 py-2 font-medium">
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {trades.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-[#8b95a5]">
-                  이 날 기록 없음. 동기화하거나 아래에 수동으로 추가.
+                <td colSpan={9} className="px-3 py-8 text-center text-[#8b95a5]">
+                  이 날 기록 없음
                 </td>
               </tr>
             ) : (
               trades.map((t) => {
-                const pct = pnlPct(t);
+                const r = roi(t);
                 return (
-                  <tr key={t.id} className="border-t border-[#2a313c]">
-                    <td className="px-3 py-3">
-                      <div className="font-medium">{symbolOf(t.instId)}</div>
-                      <div className="text-xs text-[#8b95a5]">{t.side}</div>
-                    </td>
-                    <td className="px-3 py-3 text-[#8b95a5]">Closed</td>
-                    <td className="px-3 py-3">{t.openAvgPx ?? "—"}</td>
-                    <td className="px-3 py-3">{t.closeAvgPx ?? "—"}</td>
-                    <td className={`px-3 py-3 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(t.netPnl)}</td>
-                    <td className={`px-3 py-3 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
-                      {pct == null ? "—" : `${won(pct)}%`}
-                    </td>
-                    <td className="px-3 py-3">{t.size ?? "—"}</td>
-                    <td className="px-3 py-3">{t.leverage ? `${t.leverage}x` : "—"}</td>
-                    <td className="px-3 py-3 whitespace-nowrap">{fmtTime(t.closedAt)}</td>
-                    <td className="px-3 py-3">
-                      <input
-                        defaultValue={t.memo}
-                        className="w-36 rounded border border-[#2a313c] bg-transparent px-2 py-1"
-                        onBlur={(e) => saveMemo(t.id, e.target.value)}
-                      />
-                    </td>
+                  <tr
+                    key={t.id}
+                    onClick={() => openPanel(t)}
+                    className="cursor-pointer border-t border-[#2a313c] hover:bg-[#1b2028]"
+                  >
+                    <td className="px-3 py-2 whitespace-nowrap">{hhmm(t.closedAt)}</td>
+                    <td className="px-3 py-2">{t.instId}</td>
+                    <td className="px-3 py-2 uppercase">{t.side}</td>
+                    <td className="px-3 py-2">{t.leverage ?? "—"}</td>
+                    <td className="px-3 py-2">{t.openAvgPx ?? "—"}</td>
+                    <td className="px-3 py-2">{t.closeAvgPx ?? "—"}</td>
+                    <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(t.netPnl)}</td>
+                    <td className="px-3 py-2">{r == null ? "—" : `${won(r)}%`}</td>
+                    <td className="px-3 py-2">{t.win ? "승" : "패"}</td>
                   </tr>
                 );
               })
@@ -261,6 +249,94 @@ export default function DayJournal({ date }: { date: string }) {
         <input className="rounded border border-[#2a313c] bg-transparent px-2 py-2" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="메모" />
         <button className="rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">수동 추가</button>
       </form>
+
+      {selected ? (
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setOpenId(null)}>
+          <aside className="h-full w-full max-w-md overflow-y-auto border-l border-[#2a313c] bg-[#14181e] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="text-xs uppercase text-[#8b95a5]">{selected.side}</div>
+                <h2 className="text-xl font-semibold">{selected.instId}</h2>
+                <div className="text-xs text-[#8b95a5]">{hhmm(selected.closedAt)}</div>
+              </div>
+              <button onClick={() => setOpenId(null)} className="text-sm text-[#8b95a5]">
+                닫기
+              </button>
+            </div>
+
+            <div className={`mb-4 text-3xl font-semibold ${selected.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
+              {won(selected.netPnl)}
+            </div>
+            <div className="mb-6 text-sm text-[#8b95a5]">ROI {roi(selected) == null ? "—" : `${won(roi(selected) || 0)}%`}</div>
+
+            <dl className="mb-6 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-[#8b95a5]">Entry</dt>
+                <dd>{selected.openAvgPx ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[#8b95a5]">Exit</dt>
+                <dd>{selected.closeAvgPx ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[#8b95a5]">Size</dt>
+                <dd>{selected.size ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[#8b95a5]">Lev</dt>
+                <dd>{selected.leverage ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[#8b95a5]">Fee</dt>
+                <dd>{won(selected.fee)}</dd>
+              </div>
+              <div>
+                <dt className="text-[#8b95a5]">Funding</dt>
+                <dd>{won(selected.fundingFee)}</dd>
+              </div>
+            </dl>
+
+            <label className="mb-3 block text-sm">
+              <span className="text-[#8b95a5]">별점</span>
+              <div className="mt-1 flex gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setDraft((d) => ({ ...d, rating: n }))}
+                    className={n <= draft.rating ? "text-[#f0c674]" : "text-[#2a313c]"}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </label>
+
+            <label className="mb-3 block text-sm">
+              <span className="text-[#8b95a5]">태그</span>
+              <input
+                className="mt-1 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2"
+                value={draft.tags}
+                onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))}
+                placeholder="sweep, fomo"
+              />
+            </label>
+
+            <label className="mb-4 block text-sm">
+              <span className="text-[#8b95a5]">메모</span>
+              <textarea
+                className="mt-1 h-28 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2"
+                value={draft.memo}
+                onChange={(e) => setDraft((d) => ({ ...d, memo: e.target.value }))}
+              />
+            </label>
+
+            <button onClick={saveMeta} className="w-full rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">
+              저장
+            </button>
+          </aside>
+        </div>
+      ) : null}
     </main>
   );
 }
