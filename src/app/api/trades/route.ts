@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addManual, dayStats, listTrades, updateMemo } from "@/lib/store";
+import { addManual, dayStats, listTrades, updateTradeMeta } from "@/lib/store";
 import { isValidDateKey, kstDateKey } from "@/lib/kst";
 import type { Trade } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
-  const date = req.nextUrl.searchParams.get("date") || kstDateKey();
+  const date = req.nextUrl.searchParams.get("date");
+  if (!date) {
+    return NextResponse.json({ trades: await listTrades() });
+  }
   if (!isValidDateKey(date)) {
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
   }
@@ -15,9 +18,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = (await req.json()) as { id?: string; memo?: string };
+  const body = (await req.json()) as {
+    id?: string;
+    memo?: string;
+    tags?: string;
+    rating?: number | null;
+  };
   if (!body.id) return NextResponse.json({ error: "id 필수" }, { status: 400 });
-  const trade = await updateMemo(body.id, body.memo ?? "");
+  const trade = await updateTradeMeta(body.id, {
+    memo: body.memo,
+    tags: body.tags,
+    rating: body.rating,
+  });
   if (!trade) return NextResponse.json({ error: "없음" }, { status: 404 });
   return NextResponse.json({ trade });
 }
@@ -46,6 +58,8 @@ export async function POST(req: NextRequest) {
     netPnl: net,
     win: net > 0,
     memo: b.memo || "",
+    tags: b.tags || "",
+    rating: b.rating ?? null,
     source: "manual",
   } as Trade;
   return NextResponse.json({ trade: await addManual(trade) });

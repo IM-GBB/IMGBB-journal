@@ -12,18 +12,19 @@ export async function listTrades(dateKst?: string): Promise<Trade[]> {
 
 export async function upsertTrades(incoming: Trade[]): Promise<Trade[]> {
   for (const t of incoming) {
-    const prev = (await sql`select memo from trades where id = ${t.id}`)[0];
+    const prev = (await sql`select memo, tags, rating from trades where id = ${t.id}`)[0];
     await sql`
       insert into trades (
         id, date_kst, inst_id, side, leverage,
         realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at,
-        open_avg_px, close_avg_px, size
+        open_avg_px, close_avg_px, size, tags, rating
       )
       values (
         ${t.id}, ${t.dateKst}, ${t.instId}, ${t.side}, ${t.leverage},
         ${t.realizedPnl}, ${t.fee}, ${t.fundingFee}, ${t.netPnl}, ${t.win},
         ${prev?.memo || t.memo || ""}, ${t.closedAt},
-        ${t.openAvgPx}, ${t.closeAvgPx}, ${t.size}
+        ${t.openAvgPx}, ${t.closeAvgPx}, ${t.size},
+        ${prev?.tags || t.tags || ""}, ${prev?.rating ?? t.rating ?? null}
       )
       on conflict (id) do update set
         date_kst = excluded.date_kst,
@@ -45,8 +46,20 @@ export async function upsertTrades(incoming: Trade[]): Promise<Trade[]> {
 }
 
 export async function updateMemo(id: string, memo: string): Promise<Trade | null> {
+  return updateTradeMeta(id, { memo });
+}
+
+export async function updateTradeMeta(
+  id: string,
+  patch: { memo?: string; tags?: string; rating?: number | null }
+): Promise<Trade | null> {
   const rows = await sql`
-    update trades set memo = ${memo} where id = ${id} returning *
+    update trades set
+      memo = coalesce(${patch.memo ?? null}, memo),
+      tags = coalesce(${patch.tags ?? null}, tags),
+      rating = coalesce(${patch.rating ?? null}, rating)
+    where id = ${id}
+    returning *
   `;
   return rows[0] ? rowToTrade(rows[0]) : null;
 }
@@ -56,13 +69,14 @@ export async function addManual(trade: Trade): Promise<Trade> {
     insert into trades (
       id, date_kst, inst_id, side, leverage,
       realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at,
-      open_avg_px, close_avg_px, size
+      open_avg_px, close_avg_px, size, tags, rating
     )
     values (
       ${trade.id}, ${trade.dateKst}, ${trade.instId}, ${trade.side}, ${trade.leverage},
       ${trade.realizedPnl}, ${trade.fee}, ${trade.fundingFee}, ${trade.netPnl}, ${trade.win},
       ${trade.memo ?? ""}, ${trade.closedAt},
-      ${trade.openAvgPx ?? null}, ${trade.closeAvgPx ?? null}, ${trade.size ?? null}
+      ${trade.openAvgPx ?? null}, ${trade.closeAvgPx ?? null}, ${trade.size ?? null},
+      ${trade.tags ?? ""}, ${trade.rating ?? null}
     )
     on conflict (id) do update set
       date_kst = excluded.date_kst,
@@ -119,10 +133,12 @@ function rowToTrade(r: any): Trade {
     fundingFee: Number(r.funding_fee ?? 0),
     netPnl: Number(r.net_pnl ?? 0),
     win: Boolean(r.win),
-    memo: r.memo,
+    memo: r.memo || "",
     closedAt: r.closed_at,
     openAvgPx: r.open_avg_px == null ? null : Number(r.open_avg_px),
     closeAvgPx: r.close_avg_px == null ? null : Number(r.close_avg_px),
     size: r.size == null ? null : Number(r.size),
+    tags: r.tags || "",
+    rating: r.rating == null ? null : Number(r.rating),
   } as Trade;
 }

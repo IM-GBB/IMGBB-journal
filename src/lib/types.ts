@@ -19,6 +19,8 @@ export type Trade = {
   netPnl: number;
   win: boolean;
   memo: string;
+  tags?: string;
+  rating?: number | null;
   source: Source;
   posId?: string;
   billId?: string;
