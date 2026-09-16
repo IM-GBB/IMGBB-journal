@@ -16,12 +16,14 @@ export async function upsertTrades(incoming: Trade[]): Promise<Trade[]> {
     await sql`
       insert into trades (
         id, date_kst, inst_id, side, leverage,
-        realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at
+        realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at,
+        open_avg_px, close_avg_px, size
       )
       values (
         ${t.id}, ${t.dateKst}, ${t.instId}, ${t.side}, ${t.leverage},
         ${t.realizedPnl}, ${t.fee}, ${t.fundingFee}, ${t.netPnl}, ${t.win},
-        ${prev?.memo || t.memo || ""}, ${t.closedAt}
+        ${prev?.memo || t.memo || ""}, ${t.closedAt},
+        ${t.openAvgPx}, ${t.closeAvgPx}, ${t.size}
       )
       on conflict (id) do update set
         date_kst = excluded.date_kst,
@@ -33,7 +35,10 @@ export async function upsertTrades(incoming: Trade[]): Promise<Trade[]> {
         funding_fee = excluded.funding_fee,
         net_pnl = excluded.net_pnl,
         win = excluded.win,
-        closed_at = excluded.closed_at
+        closed_at = excluded.closed_at,
+        open_avg_px = excluded.open_avg_px,
+        close_avg_px = excluded.close_avg_px,
+        size = excluded.size
     `;
   }
   return incoming;
@@ -50,12 +55,14 @@ export async function addManual(trade: Trade): Promise<Trade> {
   await sql`
     insert into trades (
       id, date_kst, inst_id, side, leverage,
-      realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at
+      realized_pnl, fee, funding_fee, net_pnl, win, memo, closed_at,
+      open_avg_px, close_avg_px, size
     )
     values (
       ${trade.id}, ${trade.dateKst}, ${trade.instId}, ${trade.side}, ${trade.leverage},
       ${trade.realizedPnl}, ${trade.fee}, ${trade.fundingFee}, ${trade.netPnl}, ${trade.win},
-      ${trade.memo ?? ""}, ${trade.closedAt}
+      ${trade.memo ?? ""}, ${trade.closedAt},
+      ${trade.openAvgPx ?? null}, ${trade.closeAvgPx ?? null}, ${trade.size ?? null}
     )
     on conflict (id) do update set
       date_kst = excluded.date_kst,
@@ -68,7 +75,10 @@ export async function addManual(trade: Trade): Promise<Trade> {
       net_pnl = excluded.net_pnl,
       win = excluded.win,
       memo = excluded.memo,
-      closed_at = excluded.closed_at
+      closed_at = excluded.closed_at,
+      open_avg_px = excluded.open_avg_px,
+      close_avg_px = excluded.close_avg_px,
+      size = excluded.size
   `;
   return trade;
 }
@@ -111,5 +121,8 @@ function rowToTrade(r: any): Trade {
     win: Boolean(r.win),
     memo: r.memo,
     closedAt: r.closed_at,
+    openAvgPx: r.open_avg_px == null ? null : Number(r.open_avg_px),
+    closeAvgPx: r.close_avg_px == null ? null : Number(r.close_avg_px),
+    size: r.size == null ? null : Number(r.size),
   } as Trade;
 }
