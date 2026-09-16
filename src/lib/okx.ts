@@ -36,7 +36,6 @@ type PosHist = {
   instId: string;
   instType: string;
   posId: string;
-  type?: string;
   direction?: string;
   posSide?: string;
   lever?: string;
@@ -50,6 +49,7 @@ type PosHist = {
   pnl?: string;
   uTime?: string;
   cTime?: string;
+  type?: string;
 };
 
 function num(v?: string): number {
@@ -66,16 +66,10 @@ function dedupeCloses(rows: PosHist[]): PosHist[] {
   const byKey = new Map<string, PosHist>();
   for (const row of rows) {
     if (row.type === "1") continue;
-    const ts = row.uTime || row.cTime || "";
-    const key = `${row.posId || row.instId}:${ts}`;
+    const key = `${row.posId || row.instId}:${row.uTime || row.cTime}`;
     const prev = byKey.get(key);
-    if (!prev || Number(row.uTime || 0) >= Number(prev.uTime || 0)) byKey.set(key, row);
-  }
-  if (byKey.size === 0) {
-    for (const row of rows) {
-      const ts = row.uTime || row.cTime || "";
-      byKey.set(`${row.posId || row.instId}:${ts}:${row.realizedPnl}:${row.fee}`, row);
-    }
+    const ts = Number(row.uTime || row.cTime || 0);
+    if (!prev || ts >= Number(prev.uTime || prev.cTime || 0)) byKey.set(key, row);
   }
   return [...byKey.values()];
 }
@@ -144,47 +138,23 @@ export async function syncDay(dateKst: string): Promise<Trade[]> {
 }
 
 export async function getEquityUsd(): Promise<number | null> {
-  const data = await okxGet<{ totalEq?: string }[]>("/api/v5/account/balance");
-  const n = Number(data?.[0]?.totalEq);
-  return Number.isFinite(n) ? n : null;
-}
-export async function fetchDayRebate(dateKst: string, feeSum: number): Promise<number> {
-  const { begin, end } = kstRangeUtcMs(dateKst);
-  let after = "";
-  let sum = 0;
   try {
-    for (let page = 0; page < 10; page++) {
-      const q = `/api/v5/asset/bills?limit=100${after ? `&after=${after}` : ""}`;
-      const rows = await okxGet<{ type?: string; ts?: string; balChg?: string; billId?: string; notes?: string }[]>(q);
-      if (!rows.length) break;
-      for (const row of rows) {
-        const ts = Number(row.ts || 0);
-        if (ts < begin || ts >= end) continue;
-        const typ = String(row.type || "");
-        const note = String(row.notes || "").toLowerCase();
-        const amt = Number(row.balChg || 0);
-        if (typ === "300" || typ === "173" || typ === "68" || note.includes("rebate")) {
-          if (amt > 0) sum += amt;
-        }
-      }
-      after = String(rows[rows.length - 1]?.billId || "");
-      const oldest = Number(rows[rows.length - 1]?.ts || 0);
-      if (!after || oldest < begin) break;
-    }
+    const data = await okxGet<{ totalEq?: string }[]>("/api/v5/account/balance");
+    const n = Number(data?.[0]?.totalEq);
+    return Number.isFinite(n) ? n : null;
   } catch {
-    sum = 0;
+    return null;
   }
-  if (sum > 0) return sum;
-  return Math.abs(feeSum) * 0.2;
 }
-export async function fetchDayRebate(dateKst: string, feeSum: number): Promise<number> {
+
+export async function fetchDayRebate(dateKst: string, _feeSum: number): Promise<number> {
   const { begin, end } = kstRangeUtcMs(dateKst);
   let after = "";
   let sum = 0;
   try {
     for (let page = 0; page < 15; page++) {
       const q = `/api/v5/asset/bills?limit=100${after ? `&after=${after}` : ""}`;
-      const rows = await okxGet<{ type?: string; ts?: string; balChg?: string; billId?: string; notes?: string }[]>(q);
+      const rows = await okxGet<{ ts?: string; balChg?: string; billId?: string; notes?: string }[]>(q);
       if (!rows.length) break;
       for (const row of rows) {
         const ts = Number(row.ts || 0);
@@ -202,6 +172,7 @@ export async function fetchDayRebate(dateKst: string, feeSum: number): Promise<n
   }
   return sum;
 }
+
 export function okxConfigured(): boolean {
   return creds().ready;
 }
