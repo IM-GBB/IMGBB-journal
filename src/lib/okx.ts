@@ -17,7 +17,7 @@ function sign(timestamp: string, method: string, path: string, secret: string) {
 
 async function okxGet<T>(pathWithQuery: string): Promise<T> {
   const { apiKey, secret, passphrase, ready } = creds();
-  if (!ready) throw new Error("OKX 키가 없습니다. .env.local에 Read-only 키를 넣으세요.");
+  if (!ready) throw new Error("OKX 키가 없습니다.");
   const timestamp = new Date().toISOString();
   const headers = {
     "OK-ACCESS-KEY": apiKey,
@@ -61,22 +61,32 @@ function sideOf(p: PosHist): "long" | "short" {
   return d === "short" ? "short" : "long";
 }
 
+function latestByPosId(rows: PosHist[]): PosHist[] {
+  const map = new Map<string, PosHist>();
+  for (const row of rows) {
+    const prev = map.get(row.posId);
+    const ts = Number(row.uTime || row.cTime || 0);
+    const pts = prev ? Number(prev.uTime || prev.cTime || 0) : -1;
+    if (!prev || ts >= pts) map.set(row.posId, row);
+  }
+  return [...map.values()];
+}
+
 export async function syncDay(dateKst: string): Promise<Trade[]> {
   const { begin, end } = kstRangeUtcMs(dateKst);
   const now = Date.now();
-  const threeMonths = 90 * 86400000;
-  if (begin < now - threeMonths) {
-    throw new Error("이 날짜는 OKX API 3개월 창 밖입니다. CSV로 넣으세요.");
+  if (begin < now - 90 * 86400000) {
+    throw new Error("이 날짜는 OKX API 3개월 창 밖입니다.");
   }
 
   const ALLOWED = new Set(["SWAP", "FUTURES", "MARGIN", "OPTION"]);
-const instTypes = (process.env.OKX_INST_TYPES || "SWAP")
-  .split(",")
-  .map((s) => s.trim().toUpperCase())
-  .filter((s) => ALLOWED.has(s));
-if (!instTypes.length) instTypes.push("SWAP");
-  const collected: PosHist[] = [];
+  const instTypes = (process.env.OKX_INST_TYPES || "SWAP")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => ALLOWED.has(s));
+  if (!instTypes.length) instTypes.push("SWAP");
 
+  const collected: PosHist[] = [];
   for (const instType of instTypes) {
     let after = String(end);
     for (let page = 0; page < 20; page++) {
@@ -93,45 +103,44 @@ if (!instTypes.length) instTypes.push("SWAP");
     }
   }
 
-  return collected.map((p) => {
-    const realized = num(p.realizedPnl);
-    const fee = num(p.fee);
-    const funding = num(p.fundingFee);
-    const net = realized !== 0 ? realized : num(p.pnl) + fee + funding;
-    const closedAt = new Date(Number(p.uTime || p.cTime || begin)).toISOString();
-    const id = `okx:${p.posId}:${p.uTime || p.cTime}`;
-    return {
-      id,
-      dateKst: kstDateKey(new Date(Number(p.uTime || p.cTime || begin))),
-      closedAt,
-      instId: p.instId,
-      instType: p.instType,
-      side: sideOf(p),
-      leverage: p.lever ? num(p.lever) : null,
-      mgnMode: p.mgnMode || "",
-      openAvgPx: p.openAvgPx ? num(p.openAvgPx) : null,
-      closeAvgPx: p.closeAvgPx ? num(p.closeAvgPx) : null,
-      size: p.closeTotalPos ? num(p.closeTotalPos) : null,
-      realizedPnl: realized,
-      fee,
-      fundingFee: funding,
-      netPnl: net,
-      win: net > 0,
-      memo: "",
-      source: "okx" as const,
-      posId: p.posId,
-    };
-  }).filter((t) => t.dateKst === dateKst);
+  return latestByPosId(collected)
+    .map((p) => {
+      const realized = num(p.realizedPnl);
+      const fee = num(p.fee);
+      const funding = num(p.fundingFee);
+      const net = realized !== 0 ? realized : num(p.pnl) + fee + funding;
+      const closedAt = new Date(Number(p.uTime || p.cTime || begin)).toISOString();
+      return {
+        id: `okx:${p.posId}`,
+        dateKst: kstDateKey(new Date(Number(p.uTime || p.cTime || begin))),
+        closedAt,
+        instId: p.instId,
+        instType: p.instType,
+        side: sideOf(p),
+        leverage: p.lever ? num(p.lever) : null,
+        mgnMode: p.mgnMode || "",
+        openAvgPx: p.openAvgPx ? num(p.openAvgPx) : null,
+        closeAvgPx: p.closeAvgPx ? num(p.closeAvgPx) : null,
+        size: p.closeTotalPos ? num(p.closeTotalPos) : null,
+        realizedPnl: realized,
+        fee,
+        fundingFee: funding,
+        netPnl: net,
+        win: net > 0,
+        memo: "",
+        source: "okx" as const,
+        posId: p.posId,
+      };
+    })
+    .filter((t) => t.dateKst === dateKst);
 }
+
 export async function getEquityUsd(): Promise<number | null> {
-  try {
-    const data = await okxGet<{ totalEq?: string }[]>("/api/v5/account/balance");
-    const n = Number(data?.[0]?.totalEq);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
+  const data = await okxGet<{ totalEq?: string }[]>("/api/v5/account/balance");
+  const n = Number(data?.[0]?.totalEq);
+  return Number.isFinite(n) ? n : null;
 }
+
 export function okxConfigured(): boolean {
   return creds().ready;
 }
