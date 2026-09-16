@@ -12,6 +12,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: "OKX Journal", active: path === "/" || path.startsWith("/journal") },
     { href: "/reports", label: "Reports", active: path.startsWith("/reports") },
     { href: "/progress", label: "Progress", active: path.startsWith("/progress") },
+    { href: "/strategies", label: "Strategies", active: path.startsWith("/strategies") },
     { href: "/stock", label: "Stock Journal", active: path.startsWith("/stock") },
   ];
 
@@ -23,7 +24,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         {open ? "메뉴 닫기" : "메뉴"}
       </button>
-
       {open ? (
         <aside className="fixed left-3 top-14 z-30 w-52 rounded-xl border border-[#2a313c] bg-[#14181e] p-2">
           {items.map((it) => (
@@ -40,7 +40,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </aside>
       ) : null}
-
       {children}
     </div>
   );
