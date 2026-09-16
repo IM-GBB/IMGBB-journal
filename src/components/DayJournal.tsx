@@ -5,15 +5,7 @@ import Link from "next/link";
 import { shiftDate } from "@/lib/kst";
 import type { DayStats, Trade } from "@/lib/types";
 import HoverAreaChart from "@/components/HoverAreaChart";
-
-function won(n: number) {
-  const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function tickerOf(instId: string) {
-  return instId.replace("-SWAP", "").replace("-USDT", "USDT").replace(/-/g, "");
-}
+import { money, roiPct, tickerOf } from "@/lib/format";
 
 function roi(t: Trade) {
   if (t.openAvgPx && t.size && t.leverage) {
@@ -40,7 +32,6 @@ export default function DayJournal({ date }: { date: string }) {
   const [stats, setStats] = useState<DayStats | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [configured, setConfigured] = useState(false);
   const [note, setNote] = useState("");
   const [chartOpen, setChartOpen] = useState(true);
   const [form, setForm] = useState({ instId: "BTC-USDT-SWAP", side: "long", leverage: "10", netPnl: "", memo: "" });
@@ -59,17 +50,9 @@ export default function DayJournal({ date }: { date: string }) {
 
   useEffect(() => {
     load();
-    fetch("/api/sync")
-      .then((r) => r.json())
-      .then((j) => setConfigured(Boolean(j.configured)));
   }, [load]);
 
   const selected = useMemo(() => trades.find((t) => t.id === openId) || null, [trades, openId]);
-
-  function openPanel(t: Trade) {
-    setOpenId(t.id);
-    setDraft({ memo: t.memo || "", tags: t.tags || "", rating: t.rating || 0 });
-  }
 
   async function syncDay() {
     setBusy(true);
@@ -103,12 +86,7 @@ export default function DayJournal({ date }: { date: string }) {
     await fetch("/api/trades", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: openId,
-        memo: draft.memo,
-        tags: draft.tags,
-        rating: draft.rating || null,
-      }),
+      body: JSON.stringify({ id: openId, memo: draft.memo, tags: draft.tags, rating: draft.rating || null }),
     });
     await load();
   }
@@ -140,59 +118,57 @@ export default function DayJournal({ date }: { date: string }) {
   }, [trades]);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <main className="mx-auto max-w-6xl px-4 py-8">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/" className="text-sm text-[#8b95a5]">← Day View</Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{date}</h1>
+          <Link href="/" className="text-sm text-[#6b7280]">← Day View</Link>
+          <h1 className="mt-1 text-3xl font-semibold">{date}</h1>
+          <p className={`mt-1 text-lg font-semibold ${stats && stats.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>
+            Net P&L {stats ? money(stats.netPnl) : "—"}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">Prev</Link>
-          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">Next</Link>
-          <button onClick={syncDay} disabled={busy} className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm font-medium text-[#0b0d10] disabled:opacity-50">
-            {busy ? "Syncing…" : "Sync this day"}
+          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm">Prev</Link>
+          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm">Next</Link>
+          <button onClick={syncDay} disabled={busy} className="rounded-lg bg-[#6d5cff] px-4 py-2 text-sm text-white disabled:opacity-50">
+            {busy ? "IMGBB…" : "IMGBB"}
           </button>
         </div>
       </header>
 
-      {msg ? <p className="mb-4 text-sm text-[#f0c674]">{msg}</p> : null}
-      {!configured ? (
-        <p className="mb-4 rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm text-[#8b95a5]">No OKX key. Manual entry only.</p>
-      ) : null}
+      {msg ? <p className="mb-4 text-sm text-[#6d5cff]">{msg}</p> : null}
 
-      <div className="mb-3">
-        <button onClick={() => setChartOpen((v) => !v)} className="rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm">
-          {chartOpen ? "Hide chart" : "Show chart"}
-        </button>
-      </div>
+      <button onClick={() => setChartOpen((v) => !v)} className="mb-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm">
+        {chartOpen ? "Hide chart" : "Show chart"}
+      </button>
 
       {chartOpen ? (
-        <section className="mb-3 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
-          <div className="mb-1 text-sm text-[#8b95a5]">Intraday cumulative Net P&L</div>
+        <section className="mb-4 rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
+          <div className="mb-2 text-sm text-[#6b7280]">Intraday cumulative Net P&L</div>
           <HoverAreaChart points={chartPts} baseline={0} />
         </section>
       ) : null}
 
-      <section className="mb-6 grid grid-cols-3 gap-2 md:grid-cols-5">
+      <section className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
         {[
           ["Trades", stats ? String(stats.trades) : "—"],
           ["Win rate", stats ? `${(stats.winRate * 100).toFixed(0)}%` : "—"],
-          ["Net P&L", stats ? won(stats.netPnl) : "—"],
-          ["Fees", stats ? won(stats.fee) : "—"],
+          ["Net P&L", stats ? money(stats.netPnl) : "—"],
+          ["Fees", stats ? money(stats.fee) : "—"],
           ["Avg lev", stats?.avgLeverage != null ? `${stats.avgLeverage.toFixed(1)}x` : "—"],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2">
-            <div className="text-[10px] text-[#8b95a5]">{k}</div>
-            <div className="text-sm font-medium">{v}</div>
+          <div key={k} className="rounded-2xl border border-[#e5e7eb] bg-white px-3 py-2 shadow-sm">
+            <div className="text-[11px] text-[#6b7280]">{k}</div>
+            <div className="text-sm font-semibold text-[#111827]">{v}</div>
           </div>
         ))}
       </section>
 
-      <div className="overflow-x-auto rounded-xl border border-[#2a313c]">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="bg-[#14181e] text-[#8b95a5]">
+      <div className="overflow-x-auto rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
+          <thead className="text-[#6b7280]">
             <tr>
-              {["Open time", "Ticker", "Side", "Instrument", "Net P&L", "Net ROI"].map((h) => (
+              {["Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Fee", "Funding", "Lev", "Entry", "Exit", "Size", "Time"].map((h) => (
                 <th key={h} className="px-3 py-2 font-medium">{h}</th>
               ))}
             </tr>
@@ -200,24 +176,33 @@ export default function DayJournal({ date }: { date: string }) {
           <tbody>
             {trades.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-[#8b95a5]">No trades</td>
+                <td colSpan={12} className="px-3 py-8 text-center text-[#6b7280]">No trades</td>
               </tr>
             ) : (
               trades.map((t) => {
-                const r = roi(t);
                 const tk = tickerOf(t.instId);
+                const r = roi(t);
                 return (
-                  <tr key={t.id} onClick={() => openPanel(t)} className="cursor-pointer border-t border-[#2a313c] hover:bg-[#1b2028]">
-                    <td className="px-3 py-2 whitespace-nowrap text-[#8b95a5]">{hhmm(t.closedAt)}</td>
-                    <td className="px-3 py-2">
-                      <span className="rounded-full bg-[#1b2028] px-2 py-0.5 text-xs">{tk}</span>
-                    </td>
+                  <tr
+                    key={t.id}
+                    onClick={() => {
+                      setOpenId(t.id);
+                      setDraft({ memo: t.memo || "", tags: t.tags || "", rating: t.rating || 0 });
+                    }}
+                    className="cursor-pointer border-t border-[#f3f4f6] hover:bg-[#f9fafb]"
+                  >
+                    <td className="px-3 py-2"><span className="rounded-full bg-[#f3f4f6] px-2 py-0.5 text-xs text-[#111827]">{tk}</span></td>
                     <td className="px-3 py-2 uppercase">{t.side}</td>
-                    <td className="px-3 py-2 text-[#8b95a5]">{tk}</td>
-                    <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(t.netPnl)}</td>
-                    <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
-                      {r == null ? "—" : `${won(r)}%`}
-                    </td>
+                    <td className="px-3 py-2 text-[#6b7280]">{tk}</td>
+                    <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>{money(t.netPnl)}</td>
+                    <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>{roiPct(r)}</td>
+                    <td className="px-3 py-2">{money(t.fee)}</td>
+                    <td className="px-3 py-2">{money(t.fundingFee)}</td>
+                    <td className="px-3 py-2">{t.leverage ?? "—"}</td>
+                    <td className="px-3 py-2">{t.openAvgPx == null ? "—" : t.openAvgPx.toFixed(2)}</td>
+                    <td className="px-3 py-2">{t.closeAvgPx == null ? "—" : t.closeAvgPx.toFixed(2)}</td>
+                    <td className="px-3 py-2">{t.size == null ? "—" : t.size.toFixed(2)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-[#6b7280]">{hhmm(t.closedAt)}</td>
                   </tr>
                 );
               })
@@ -226,67 +211,45 @@ export default function DayJournal({ date }: { date: string }) {
         </table>
       </div>
 
-      <form onSubmit={addManual} className="mt-6 grid gap-2 rounded-xl border border-[#2a313c] bg-[#14181e] p-4 md:grid-cols-6">
-        <input className="rounded border border-[#2a313c] bg-transparent px-2 py-2" value={form.instId} onChange={(e) => setForm({ ...form, instId: e.target.value })} placeholder="instId" />
-        <select className="rounded border border-[#2a313c] bg-[#0b0d10] px-2 py-2" value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value })}>
+      <form onSubmit={addManual} className="mt-6 grid gap-2 rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm md:grid-cols-6">
+        <input className="rounded-lg border border-[#e5e7eb] bg-white px-2 py-2 text-[#111827]" value={form.instId} onChange={(e) => setForm({ ...form, instId: e.target.value })} />
+        <select className="rounded-lg border border-[#e5e7eb] bg-white px-2 py-2" value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value })}>
           <option value="long">long</option>
           <option value="short">short</option>
         </select>
-        <input className="rounded border border-[#2a313c] bg-transparent px-2 py-2" value={form.leverage} onChange={(e) => setForm({ ...form, leverage: e.target.value })} placeholder="lev" />
-        <input className="rounded border border-[#2a313c] bg-transparent px-2 py-2" value={form.netPnl} onChange={(e) => setForm({ ...form, netPnl: e.target.value })} placeholder="net pnl" />
-        <input className="rounded border border-[#2a313c] bg-transparent px-2 py-2" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="memo" />
-        <button className="rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">Add manual</button>
+        <input className="rounded-lg border border-[#e5e7eb] bg-white px-2 py-2" value={form.leverage} onChange={(e) => setForm({ ...form, leverage: e.target.value })} />
+        <input className="rounded-lg border border-[#e5e7eb] bg-white px-2 py-2" value={form.netPnl} onChange={(e) => setForm({ ...form, netPnl: e.target.value })} placeholder="net pnl" />
+        <input className="rounded-lg border border-[#e5e7eb] bg-white px-2 py-2" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="memo" />
+        <button className="rounded-lg bg-[#6d5cff] px-3 py-2 text-white">Add manual</button>
       </form>
 
-      <section className="mt-6 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
-        <div className="mb-2 text-sm text-[#8b95a5]">Day note</div>
-        <textarea
-          className="h-24 w-full rounded border border-[#2a313c] bg-transparent px-3 py-2 text-sm"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="market, mistakes, next rule"
-        />
-        <button onClick={saveNote} className="mt-2 rounded-lg bg-[#e8edf4] px-3 py-2 text-sm text-[#0b0d10]">Save note</button>
+      <section className="mt-6 rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
+        <div className="mb-2 text-sm text-[#6b7280]">Day note</div>
+        <textarea className="h-24 w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm" value={note} onChange={(e) => setNote(e.target.value)} />
+        <button onClick={saveNote} className="mt-2 rounded-lg bg-[#6d5cff] px-3 py-2 text-sm text-white">Save note</button>
       </section>
 
       {selected ? (
-        <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setOpenId(null)}>
-          <aside className="h-full w-full max-w-md overflow-y-auto border-l border-[#2a313c] bg-[#14181e] p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-start justify-between">
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={() => setOpenId(null)}>
+          <aside className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex justify-between">
               <div>
-                <div className="text-xs uppercase text-[#8b95a5]">{selected.side}</div>
+                <div className="text-xs uppercase text-[#6b7280]">{selected.side}</div>
                 <h2 className="text-xl font-semibold">{tickerOf(selected.instId)}</h2>
-                <div className="text-xs text-[#8b95a5]">{hhmm(selected.closedAt)}</div>
               </div>
-              <button onClick={() => setOpenId(null)} className="text-sm text-[#8b95a5]">Close</button>
+              <button onClick={() => setOpenId(null)} className="text-sm text-[#6b7280]">Close</button>
             </div>
-            <div className={`mb-2 text-3xl font-semibold ${selected.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(selected.netPnl)}</div>
-            <div className="mb-6 text-sm text-[#8b95a5]">ROI {roi(selected) == null ? "—" : `${won(roi(selected) || 0)}%`}</div>
-            <dl className="mb-6 grid grid-cols-2 gap-3 text-sm">
-              <div><dt className="text-[#8b95a5]">Entry</dt><dd>{selected.openAvgPx == null ? "—" : won(selected.openAvgPx)}</dd></div>
-              <div><dt className="text-[#8b95a5]">Exit</dt><dd>{selected.closeAvgPx == null ? "—" : won(selected.closeAvgPx)}</dd></div>
-              <div><dt className="text-[#8b95a5]">Size</dt><dd>{selected.size == null ? "—" : won(selected.size)}</dd></div>
-              <div><dt className="text-[#8b95a5]">Lev</dt><dd>{selected.leverage ?? "—"}</dd></div>
-              <div><dt className="text-[#8b95a5]">Fee</dt><dd>{won(selected.fee)}</dd></div>
-              <div><dt className="text-[#8b95a5]">Funding</dt><dd>{won(selected.fundingFee)}</dd></div>
-            </dl>
+            <div className={`mb-4 text-3xl font-semibold ${selected.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>{money(selected.netPnl)}</div>
+            <div className="mb-4 text-sm text-[#6b7280]">ROI {roiPct(roi(selected))}</div>
             <label className="mb-3 block text-sm">
-              <span className="text-[#8b95a5]">Rating</span>
-              <div className="mt-1 flex gap-1">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} type="button" onClick={() => setDraft((d) => ({ ...d, rating: n }))} className={n <= draft.rating ? "text-[#f0c674]" : "text-[#2a313c]"}>★</button>
-                ))}
-              </div>
-            </label>
-            <label className="mb-3 block text-sm">
-              <span className="text-[#8b95a5]">Tags</span>
-              <input className="mt-1 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2" value={draft.tags} onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))} />
+              Tags
+              <input className="mt-1 w-full rounded-lg border border-[#e5e7eb] px-2 py-2" value={draft.tags} onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))} />
             </label>
             <label className="mb-4 block text-sm">
-              <span className="text-[#8b95a5]">Memo</span>
-              <textarea className="mt-1 h-28 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2" value={draft.memo} onChange={(e) => setDraft((d) => ({ ...d, memo: e.target.value }))} />
+              Memo
+              <textarea className="mt-1 h-28 w-full rounded-lg border border-[#e5e7eb] px-2 py-2" value={draft.memo} onChange={(e) => setDraft((d) => ({ ...d, memo: e.target.value }))} />
             </label>
-            <button onClick={saveMeta} className="w-full rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">Save</button>
+            <button onClick={saveMeta} className="w-full rounded-lg bg-[#6d5cff] px-3 py-2 text-white">Save</button>
           </aside>
         </div>
       ) : null}
