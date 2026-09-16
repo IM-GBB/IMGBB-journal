@@ -3,13 +3,13 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "OKX Journal",
-  description: "개인 선물/주식 매매일지",
+  title: "IMGBB Journal",
+  description: "IMGBB futures and stock journal",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko">
+    <html lang="en">
       <body className="min-h-dvh">
         <AppShell>{children}</AppShell>
       </body>
