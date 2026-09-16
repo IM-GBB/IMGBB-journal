@@ -152,7 +152,7 @@ export default function CalendarHome() {
       : [];
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-8">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-[#6b7280]">IMGBB Journal</p>
@@ -176,17 +176,21 @@ export default function CalendarHome() {
       </div>
       {syncMsg ? <p className="mb-4 text-sm text-[#6d5cff]">{syncMsg}</p> : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_240px]">
-        <div className="space-y-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="min-w-0 space-y-3">
           {cards.map((st) => {
             const list = byDate.get(st.dateKst) || [];
             const extra = enrich(list);
             const expanded = open === st.dateKst;
+            const chrono = [...list].sort((a, b) => a.closedAt.localeCompare(b.closedAt));
             let c = 0;
-            const pts = [...list].reverse().map((t, i) => {
-              c += t.netPnl;
-              return { label: `#${i + 1}`, value: c };
-            });
+            const pts = [
+              { label: "start", value: 0 },
+              ...chrono.map((t, i) => {
+                c += t.netPnl;
+                return { label: `#${i + 1}`, value: c };
+              }),
+            ];
             return (
               <section key={st.dateKst} className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
@@ -222,8 +226,8 @@ export default function CalendarHome() {
                 </div>
 
                 {expanded ? (
-                  <div className="overflow-x-auto border-t border-[#f3f4f6]">
-                    <table className="w-full min-w-[1100px] text-left text-sm">
+                  <div className="max-w-full overflow-x-auto border-t border-[#f3f4f6]">
+                    <table className="w-full min-w-[960px] text-left text-sm">
                       <thead className="text-[#6b7280]">
                         <tr>
                           {["Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Fee", "Funding", "Lev", "Entry", "Exit", "Size", "Time"].map((h) => (
@@ -273,7 +277,7 @@ export default function CalendarHome() {
           })}
         </div>
 
-        <aside className="h-fit rounded-2xl border border-[#e5e7eb] bg-white p-3 shadow-sm">
+        <aside className="h-fit w-full rounded-2xl border border-[#e5e7eb] bg-white p-3 shadow-sm lg:sticky lg:top-4">
           <div className="mb-2 text-center text-sm">{month}</div>
           <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[#9ca3af]">
             {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (

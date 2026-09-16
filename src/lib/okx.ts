@@ -36,6 +36,7 @@ type PosHist = {
   instId: string;
   instType: string;
   posId: string;
+  type?: string;
   direction?: string;
   posSide?: string;
   lever?: string;
@@ -61,15 +62,22 @@ function sideOf(p: PosHist): "long" | "short" {
   return d === "short" ? "short" : "long";
 }
 
-function latestByPosId(rows: PosHist[]): PosHist[] {
-  const map = new Map<string, PosHist>();
+function dedupeCloses(rows: PosHist[]): PosHist[] {
+  const byKey = new Map<string, PosHist>();
   for (const row of rows) {
-    const prev = map.get(row.posId);
-    const ts = Number(row.uTime || row.cTime || 0);
-    const pts = prev ? Number(prev.uTime || prev.cTime || 0) : -1;
-    if (!prev || ts >= pts) map.set(row.posId, row);
+    if (row.type === "1") continue;
+    const ts = row.uTime || row.cTime || "";
+    const key = `${row.posId || row.instId}:${ts}`;
+    const prev = byKey.get(key);
+    if (!prev || Number(row.uTime || 0) >= Number(prev.uTime || 0)) byKey.set(key, row);
   }
-  return [...map.values()];
+  if (byKey.size === 0) {
+    for (const row of rows) {
+      const ts = row.uTime || row.cTime || "";
+      byKey.set(`${row.posId || row.instId}:${ts}:${row.realizedPnl}:${row.fee}`, row);
+    }
+  }
+  return [...byKey.values()];
 }
 
 export async function syncDay(dateKst: string): Promise<Trade[]> {
@@ -103,17 +111,17 @@ export async function syncDay(dateKst: string): Promise<Trade[]> {
     }
   }
 
-  return latestByPosId(collected)
+  return dedupeCloses(collected)
     .map((p) => {
       const realized = num(p.realizedPnl);
       const fee = num(p.fee);
       const funding = num(p.fundingFee);
       const net = realized !== 0 ? realized : num(p.pnl) + fee + funding;
-      const closedAt = new Date(Number(p.uTime || p.cTime || begin)).toISOString();
+      const ts = Number(p.uTime || p.cTime || begin);
       return {
-        id: `okx:${p.posId}`,
-        dateKst: kstDateKey(new Date(Number(p.uTime || p.cTime || begin))),
-        closedAt,
+        id: `okx:${p.posId || p.instId}:${p.uTime || p.cTime}`,
+        dateKst: kstDateKey(new Date(ts)),
+        closedAt: new Date(ts).toISOString(),
         instId: p.instId,
         instType: p.instType,
         side: sideOf(p),
