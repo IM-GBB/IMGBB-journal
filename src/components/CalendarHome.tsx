@@ -324,14 +324,17 @@ export default function CalendarHome() {
           const key = `${y}-${String(m).padStart(2, "0")}-${day}`;
           const st = byDate.get(key);
           const inWeek = week === 0 || weekOfMonth(key) === week;
+          const isToday = key === today;
           if (!st) {
             return (
               <Link
                 key={key}
                 href={`/journal/${key}`}
-                className={`rounded-lg border border-[#1b2028] px-2 py-3 text-sm text-[#5b6472] ${
-                  !inWeek ? "opacity-40" : ""
-                }`}
+                className={`rounded-lg border px-2 py-3 text-sm ${
+                  isToday
+                    ? "border-[#e8edf4] bg-[#e8edf414] text-[#e8edf4]"
+                    : "border-[#1b2028] text-[#5b6472]"
+                } ${!inWeek ? "opacity-40" : ""}`}
               >
                 {i + 1}
               </Link>
@@ -343,7 +346,7 @@ export default function CalendarHome() {
             <Link
               key={key}
               href={`/journal/${key}`}
-              className={`rounded-lg border px-2 py-3 text-sm ${
+              className={`rounded-lg border px-2 py-3 text-sm ${isToday ? "ring-1 ring-[#e8edf4] " : ""}${
                 !inWeek
                   ? "border-[#2a313c] text-[#5b6472] opacity-40"
                   : win

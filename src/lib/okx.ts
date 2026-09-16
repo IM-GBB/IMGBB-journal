@@ -123,7 +123,15 @@ if (!instTypes.length) instTypes.push("SWAP");
     };
   }).filter((t) => t.dateKst === dateKst);
 }
-
+export async function getEquityUsd(): Promise<number | null> {
+  try {
+    const data = await okxGet<{ totalEq?: string }[]>("/api/v5/account/balance");
+    const n = Number(data?.[0]?.totalEq);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
 export function okxConfigured(): boolean {
   return creds().ready;
 }
