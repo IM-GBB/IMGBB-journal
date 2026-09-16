@@ -97,7 +97,7 @@ if (!instTypes.length) instTypes.push("SWAP");
     const realized = num(p.realizedPnl);
     const fee = num(p.fee);
     const funding = num(p.fundingFee);
-    const net = num(p.pnl) || realized + fee + funding;
+    const net = realized !== 0 ? realized : num(p.pnl) + fee + funding;
     const closedAt = new Date(Number(p.uTime || p.cTime || begin)).toISOString();
     const id = `okx:${p.posId}:${p.uTime || p.cTime}`;
     return {
