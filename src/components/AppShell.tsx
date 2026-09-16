@@ -7,9 +7,9 @@ import { useState } from "react";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
-
   const items = [
     { href: "/", label: "OKX Journal", active: path === "/" || path.startsWith("/journal") },
+    { href: "/trades", label: "Trade View", active: path.startsWith("/trades") },
     { href: "/reports", label: "Reports", active: path.startsWith("/reports") },
     { href: "/progress", label: "Progress", active: path.startsWith("/progress") },
     { href: "/strategies", label: "Strategies", active: path.startsWith("/strategies") },
