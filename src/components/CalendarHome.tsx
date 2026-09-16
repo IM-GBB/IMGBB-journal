@@ -38,6 +38,7 @@ export default function CalendarHome() {
   const today = kstDateKey();
   const [days, setDays] = useState<DayStats[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [rebates, setRebates] = useState<{ dateKst: string; amount: number }[]>([]);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [open, setOpen] = useState<string>("");
   const [syncMsg, setSyncMsg] = useState("");
@@ -46,19 +47,23 @@ export default function CalendarHome() {
   const [noteText, setNoteText] = useState("");
 
   async function reload() {
-    const [ov, tr] = await Promise.all([
+    const [ov, tr, rb] = await Promise.all([
       fetch("/api/overview").then((r) => r.json()),
       fetch("/api/trades").then((r) => r.json()),
+      fetch("/api/rebates").then((r) => r.json()).catch(() => ({ rebates: [] })),
     ]);
     const list: DayStats[] = ov.days || [];
     setDays(list);
     setTrades(tr.trades || []);
+    setRebates(rb.rebates || []);
     if (list.length) setMonth(list[list.length - 1].dateKst.slice(0, 7));
   }
 
   useEffect(() => {
     reload();
   }, []);
+
+  const rebateMap = useMemo(() => new Map(rebates.map((r) => [r.dateKst, r.amount])), [rebates]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, Trade[]>();
@@ -182,6 +187,7 @@ export default function CalendarHome() {
             const list = byDate.get(st.dateKst) || [];
             const extra = enrich(list);
             const expanded = open === st.dateKst;
+            const rebate = rebateMap.get(st.dateKst) || 0;
             const chrono = [...list].sort((a, b) => a.closedAt.localeCompare(b.closedAt));
             let c = 0;
             const pts = [
@@ -194,7 +200,7 @@ export default function CalendarHome() {
             return (
               <section key={st.dateKst} className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                  <button onClick={() => setOpen(expanded ? "" : st.dateKst)} className="flex items-center gap-2 text-left">
+                  <button onClick={() => setOpen(expanded ? "" : st.dateKst)} className="flex flex-wrap items-center gap-2 text-left">
                     <span className="text-[#9ca3af]">{expanded ? "▾" : "▸"}</span>
                     <span className="font-medium">
                       {weekday(st.dateKst)}, {st.dateKst}
@@ -202,6 +208,7 @@ export default function CalendarHome() {
                     <span className={st.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}>
                       Net P&L {money(st.netPnl)}
                     </span>
+                    {rebate ? <span className="text-sm text-[#5b45e0]">Rebate {money(rebate)}</span> : null}
                   </button>
                   <button
                     onClick={() => openNote(st.dateKst)}
@@ -221,16 +228,16 @@ export default function CalendarHome() {
                     <Stat k="Win Rate" v={`${(st.winRate * 100).toFixed(0)}%`} />
                     <Stat k="Volume" v={extra.volume ? extra.volume.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"} />
                     <Stat k="Profit Factor" v={extra.pf == null ? "—" : extra.pf === Infinity ? "Inf" : extra.pf.toFixed(2)} />
-                    <Stat k="Net P&L" v={money(st.netPnl)} good={st.netPnl} />
+                    <Stat k="Rebate" v={money(rebate)} good={rebate} />
                   </div>
                 </div>
 
                 {expanded ? (
                   <div className="max-w-full overflow-x-auto border-t border-[#f3f4f6]">
-                    <table className="w-full min-w-[960px] text-left text-sm">
+                    <table className="w-full min-w-[900px] text-left text-sm">
                       <thead className="text-[#6b7280]">
                         <tr>
-                          {["Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Fee", "Funding", "Lev", "Entry", "Exit", "Size", "Time"].map((h) => (
+                          {["Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Realized", "Fee", "Funding", "Lev", "Size", "Time"].map((h) => (
                             <th key={h} className="px-3 py-2 font-medium">{h}</th>
                           ))}
                         </tr>
@@ -238,7 +245,7 @@ export default function CalendarHome() {
                       <tbody>
                         {list.length === 0 ? (
                           <tr>
-                            <td colSpan={12} className="px-3 py-6 text-center text-[#6b7280]">No trades</td>
+                            <td colSpan={11} className="px-3 py-6 text-center text-[#6b7280]">No trades</td>
                           </tr>
                         ) : (
                           list.map((t) => {
@@ -255,11 +262,10 @@ export default function CalendarHome() {
                                 <td className="px-3 py-2 text-[#6b7280]">{tk}</td>
                                 <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>{money(t.netPnl)}</td>
                                 <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#16a34a]" : "text-[#ef4444]"}`}>{roiPct(r)}</td>
+                                <td className="px-3 py-2">{money(t.realizedPnl)}</td>
                                 <td className="px-3 py-2">{money(t.fee)}</td>
                                 <td className="px-3 py-2">{money(t.fundingFee)}</td>
                                 <td className="px-3 py-2">{t.leverage ?? "—"}</td>
-                                <td className="px-3 py-2">{t.openAvgPx == null ? "—" : t.openAvgPx.toFixed(2)}</td>
-                                <td className="px-3 py-2">{t.closeAvgPx == null ? "—" : t.closeAvgPx.toFixed(2)}</td>
                                 <td className="px-3 py-2">{t.size == null ? "—" : t.size.toFixed(2)}</td>
                                 <td className="px-3 py-2 whitespace-nowrap text-[#6b7280]">
                                   {new Date(t.closedAt).toLocaleTimeString("en-GB", { timeZone: "Asia/Seoul", hour12: false })}
