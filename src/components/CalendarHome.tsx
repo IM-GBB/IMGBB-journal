@@ -39,7 +39,7 @@ function roi(t: Trade) {
   return null;
 }
 
-function enrich(st: DayStats, list: Trade[]) {
+function enrich(list: Trade[]) {
   const volume = list.reduce((s, t) => s + (t.size || 0), 0);
   const gross = list.reduce((s, t) => s + t.netPnl - t.fee - t.fundingFee, 0);
   const winSum = list.filter((t) => t.netPnl > 0).reduce((s, t) => s + t.netPnl, 0);
@@ -78,6 +78,17 @@ function MiniCurve({ trades }: { trades: Trade[] }) {
       <path d={area} fill={up ? "#3dd68c22" : "#f0717822"} />
       <path d={d} fill="none" stroke={up ? "#3dd68c" : "#f07178"} strokeWidth="1.6" />
     </svg>
+  );
+}
+
+function Stat({ k, v, good }: { k: string; v: string; good?: number }) {
+  const color =
+    good == null ? "" : good > 0 ? "text-[#3dd68c]" : good < 0 ? "text-[#f07178]" : "";
+  return (
+    <div>
+      <div className="text-[11px] text-[#8b95a5]">{k}</div>
+      <div className={`font-medium ${color}`}>{v}</div>
+    </div>
   );
 }
 
@@ -168,30 +179,9 @@ export default function CalendarHome() {
     await reload();
   }
 
-  const stack = monthDays.length
-    ? monthDays
-    : [{
-        dateKst: `${month}-01`,
-        trades: 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        realizedPnl: 0,
-        fee: 0,
-        fundingFee: 0,
-        netPnl: 0,
-        avgLeverage: null,
-      } as DayStats];
-
-  const visible = days.some((d) => d.dateKst.startsWith(month))
-    ? monthDays
-    : today.startsWith(month)
-      ? []
-      : stack;
-
   const cards: DayStats[] =
-    visible.length > 0
-      ? visible
+    monthDays.length > 0
+      ? monthDays
       : today.startsWith(month)
         ? [
             {
@@ -252,7 +242,7 @@ export default function CalendarHome() {
 
           {cards.map((st) => {
             const list = byDate.get(st.dateKst) || [];
-            const extra = enrich(st, list);
+            const extra = enrich(list);
             const expanded = open === st.dateKst;
             const pos = st.netPnl >= 0;
             return (
@@ -283,8 +273,14 @@ export default function CalendarHome() {
                         <Stat k="Winners / Losers" v={`${st.wins} / ${st.losses}`} />
                         <Stat k="Commissions" v={won(st.fee)} />
                         <Stat k="Win Rate" v={`${(st.winRate * 100).toFixed(0)}%`} />
-                        <Stat k="Volume" v={extra.volume ? extra.volume.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"} />
-                        <Stat k="Profit Factor" v={extra.pf == null ? "—" : extra.pf === Infinity ? "∞" : extra.pf.toFixed(2)} />
+                        <Stat
+                          k="Volume"
+                          v={extra.volume ? extra.volume.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                        />
+                        <Stat
+                          k="Profit Factor"
+                          v={extra.pf == null ? "—" : extra.pf === Infinity ? "Inf" : extra.pf.toFixed(2)}
+                        />
                         <Stat k="Net P&L" v={won(st.netPnl)} good={st.netPnl} />
                       </div>
                     </div>
@@ -331,7 +327,7 @@ export default function CalendarHome() {
                     </div>
                     <div className="mt-3">
                       <Link href={`/journal/${st.dateKst}`} className="text-xs text-[#8b95a5] underline">
-                        이 날 상세 →
+                        이 날 상세
                       </Link>
                     </div>
                   </div>
@@ -342,7 +338,9 @@ export default function CalendarHome() {
         </div>
 
         <aside className="h-fit rounded-xl border border-[#2a313c] bg-[#14181e] p-3">
-          <div className="mb-2 text-center text-sm">{y}년 {mo}월</div>
+          <div className="mb-2 text-center text-sm">
+            {y}년 {mo}월
+          </div>
           <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[#8b95a5]">
             {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
               <div key={d}>{d}</div>
@@ -355,19 +353,14 @@ export default function CalendarHome() {
               const key = `${month}-${day}`;
               const st = statsMap.get(key);
               const isToday = key === today;
-              const win = st && st.netPnl > 0;
-              const loss = st && st.netPnl < 0;
+              const win = Boolean(st && st.netPnl > 0);
+              const loss = Boolean(st && st.netPnl < 0);
               return (
                 <button
                   key={key}
-                  onClick={() => {
-                    setOpen(key);
-                    const el = document.getElementById ? null : null;
-                    void el;
-                  }}
-                  className={`rounded py-1 ${
-                    isToday ? "ring-1 ring-[#e8edf4] " : ""
-                  }${
+                  type="button"
+                  onClick={() => setOpen(key)}
+                  className={`rounded py-1 ${isToday ? "ring-1 ring-[#e8edf4] " : ""}${
                     win
                       ? "bg-[#3dd68c22] text-[#3dd68c]"
                       : loss
@@ -383,16 +376,5 @@ export default function CalendarHome() {
         </aside>
       </div>
     </main>
-  );
-}
-
-function Stat({ k, v, good }: { k: string; v: string; good?: number }) {
-  const color =
-    good == null ? "" : good > 0 ? "text-[#3dd68c]" : good < 0 ? "text-[#f07178]" : "";
-  return (
-    <div>
-      <div className="text-[11px] text-[#8b95a5]">{k}</div>
-      <div className={`font-medium ${color}`}>{v}</div>
-    </div>
   );
 }
