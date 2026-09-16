@@ -8,6 +8,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const stock = path.startsWith("/stock");
+  const reports = path.startsWith("/reports");
 
   return (
     <div className="min-h-dvh">
@@ -23,9 +24,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             onClick={() => setOpen(false)}
-            className={`block rounded-lg px-3 py-2 text-sm ${!stock ? "bg-[#e8edf4] text-[#0b0d10]" : "text-[#c5ccd6]"}`}
+            className={`block rounded-lg px-3 py-2 text-sm ${!stock && !reports ? "bg-[#e8edf4] text-[#0b0d10]" : "text-[#c5ccd6]"}`}
           >
             OKX Journal
+          </Link>
+          <Link
+            href="/reports"
+            onClick={() => setOpen(false)}
+            className={`mt-1 block rounded-lg px-3 py-2 text-sm ${reports ? "bg-[#e8edf4] text-[#0b0d10]" : "text-[#c5ccd6]"}`}
+          >
+            Reports
           </Link>
           <Link
             href="/stock"
