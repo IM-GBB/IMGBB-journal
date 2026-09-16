@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addManual, dayStats, listTrades, updateTradeMeta } from "@/lib/store";
-import { isValidDateKey, kstDateKey } from "@/lib/kst";
+import { isValidDateKey } from "@/lib/kst";
 import type { Trade } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     closedAt: b.closedAt || new Date().toISOString(),
     instId: b.instId,
     instType: b.instType || "SWAP",
-    side: b.side === "short" ? "short" : "long",
+    side: (b.side === "short" ? "short" : "long") as "long" | "short",
     leverage: b.leverage ?? null,
     mgnMode: b.mgnMode || "cross",
     openAvgPx: b.openAvgPx ?? null,
