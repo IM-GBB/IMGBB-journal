@@ -18,8 +18,8 @@ export default function HoverAreaChart({
   const [hover, setHover] = useState<number | null>(null);
   const w = 640;
   const h = height;
-  const left = 52;
-  const pad = 10;
+  const left = 78;
+  const pad = 14;
 
   const layout = useMemo(() => {
     if (!points.length) return null;
@@ -37,18 +37,23 @@ export default function HoverAreaChart({
     const ticks = [max, (max + baseline) / 2, baseline, (min + baseline) / 2, min]
       .filter((v, i, arr) => arr.findIndex((x) => Math.abs(x - v) < span * 0.02) === i)
       .map((v) => ({ v, y: pad + ((max - v) / span) * (h - pad * 2) }));
-    return { coords, zeroY, line, area, ticks, min, max };
+    return { coords, zeroY, line, area, ticks };
   }, [points, baseline, h]);
 
   if (!layout) return <p className="py-8 text-center text-sm text-[#6b7280]">no data</p>;
-
   const hi = hover == null ? null : layout.coords[hover];
+
+  function tickLabel(v: number) {
+    if (Math.abs(v) >= 1000) return `${v < 0 ? "-" : ""}$${(Math.abs(v) / 1000).toFixed(1)}k`;
+    return `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(0)}`;
+  }
 
   return (
     <div className="relative">
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        className="h-40 w-full"
+        style={{ height }}
+        className="w-full"
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           const box = e.currentTarget.getBoundingClientRect();
@@ -84,8 +89,8 @@ export default function HoverAreaChart({
         {layout.ticks.map((t) => (
           <g key={t.v}>
             <line x1={left} y1={t.y} x2={w} y2={t.y} stroke="#f3f4f6" />
-            <text x={4} y={t.y + 4} fontSize="10" fill="#9ca3af">
-              {Math.abs(t.v) >= 1000 ? `${(t.v / 1000).toFixed(1)}k` : t.v.toFixed(0)}
+            <text x={6} y={t.y + 5} fontSize="15" fontWeight="600" fill="#4b5563">
+              {tickLabel(t.v)}
             </text>
           </g>
         ))}
