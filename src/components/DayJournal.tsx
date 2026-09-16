@@ -36,15 +36,19 @@ export default function DayJournal({ date }: { date: string }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [configured, setConfigured] = useState(false);
+  const [note, setNote] = useState("");
   const [form, setForm] = useState({ instId: "BTC-USDT-SWAP", side: "long", leverage: "10", netPnl: "", memo: "" });
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ memo: "", tags: "", rating: 0 });
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/trades?date=${date}`);
-    const json = await res.json();
-    setTrades(json.trades || []);
-    setStats(json.stats || null);
+    const [tr, dn] = await Promise.all([
+      fetch(`/api/trades?date=${date}`).then((r) => r.json()),
+      fetch(`/api/day-note?date=${date}`).then((r) => r.json()),
+    ]);
+    setTrades(tr.trades || []);
+    setStats(tr.stats || null);
+    setNote(dn.note || "");
   }, [date]);
 
   useEffect(() => {
@@ -58,11 +62,7 @@ export default function DayJournal({ date }: { date: string }) {
 
   function openPanel(t: Trade) {
     setOpenId(t.id);
-    setDraft({
-      memo: t.memo || "",
-      tags: t.tags || "",
-      rating: t.rating || 0,
-    });
+    setDraft({ memo: t.memo || "", tags: t.tags || "", rating: t.rating || 0 });
   }
 
   async function syncDay() {
@@ -81,6 +81,15 @@ export default function DayJournal({ date }: { date: string }) {
     }
     setMsg(`${json.synced}건 동기화`);
     await load();
+  }
+
+  async function saveNote() {
+    await fetch("/api/day-note", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, note }),
+    });
+    setMsg("노트 저장");
   }
 
   async function saveMeta() {
@@ -129,23 +138,13 @@ export default function DayJournal({ date }: { date: string }) {
     <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/" className="text-sm text-[#8b95a5]">
-            ← Day View
-          </Link>
+          <Link href="/" className="text-sm text-[#8b95a5]">← Day View</Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">{date}</h1>
         </div>
         <div className="flex gap-2">
-          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">
-            이전
-          </Link>
-          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">
-            다음
-          </Link>
-          <button
-            onClick={syncDay}
-            disabled={busy}
-            className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm font-medium text-[#0b0d10] disabled:opacity-50"
-          >
+          <Link href={`/journal/${shiftDate(date, -1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">이전</Link>
+          <Link href={`/journal/${shiftDate(date, 1)}`} className="rounded-lg border border-[#2a313c] px-3 py-2 text-sm">다음</Link>
+          <button onClick={syncDay} disabled={busy} className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm font-medium text-[#0b0d10] disabled:opacity-50">
             {busy ? "동기화 중…" : "이 날만 동기화"}
           </button>
         </div>
@@ -153,9 +152,7 @@ export default function DayJournal({ date }: { date: string }) {
 
       {msg ? <p className="mb-4 text-sm text-[#f0c674]">{msg}</p> : null}
       {!configured ? (
-        <p className="mb-4 rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm text-[#8b95a5]">
-          OKX 키 없음. 수동 입력만 됩니다.
-        </p>
+        <p className="mb-4 rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm text-[#8b95a5]">OKX 키 없음. 수동 입력만 됩니다.</p>
       ) : null}
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -171,6 +168,17 @@ export default function DayJournal({ date }: { date: string }) {
             <div className="mt-1 text-lg font-medium">{v}</div>
           </div>
         ))}
+      </section>
+
+      <section className="mb-6 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
+        <div className="mb-2 text-sm text-[#8b95a5]">Day note</div>
+        <textarea
+          className="h-24 w-full rounded border border-[#2a313c] bg-transparent px-3 py-2 text-sm"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="오늘 시장, 실수, 다음 규칙"
+        />
+        <button onClick={saveNote} className="mt-2 rounded-lg bg-[#e8edf4] px-3 py-2 text-sm text-[#0b0d10]">노트 저장</button>
       </section>
 
       <section className="mb-6 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
@@ -199,28 +207,20 @@ export default function DayJournal({ date }: { date: string }) {
           <thead className="bg-[#14181e] text-[#8b95a5]">
             <tr>
               {["시간", "상품", "방향", "레버", "진입", "청산", "순손익", "ROI", "승패"].map((h) => (
-                <th key={h} className="px-3 py-2 font-medium">
-                  {h}
-                </th>
+                <th key={h} className="px-3 py-2 font-medium">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {trades.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-[#8b95a5]">
-                  이 날 기록 없음
-                </td>
+                <td colSpan={9} className="px-3 py-8 text-center text-[#8b95a5]">이 날 기록 없음</td>
               </tr>
             ) : (
               trades.map((t) => {
                 const r = roi(t);
                 return (
-                  <tr
-                    key={t.id}
-                    onClick={() => openPanel(t)}
-                    className="cursor-pointer border-t border-[#2a313c] hover:bg-[#1b2028]"
-                  >
+                  <tr key={t.id} onClick={() => openPanel(t)} className="cursor-pointer border-t border-[#2a313c] hover:bg-[#1b2028]">
                     <td className="px-3 py-2 whitespace-nowrap">{hhmm(t.closedAt)}</td>
                     <td className="px-3 py-2">{t.instId}</td>
                     <td className="px-3 py-2 uppercase">{t.side}</td>
@@ -259,81 +259,35 @@ export default function DayJournal({ date }: { date: string }) {
                 <h2 className="text-xl font-semibold">{selected.instId}</h2>
                 <div className="text-xs text-[#8b95a5]">{hhmm(selected.closedAt)}</div>
               </div>
-              <button onClick={() => setOpenId(null)} className="text-sm text-[#8b95a5]">
-                닫기
-              </button>
+              <button onClick={() => setOpenId(null)} className="text-sm text-[#8b95a5]">닫기</button>
             </div>
-
-            <div className={`mb-4 text-3xl font-semibold ${selected.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
-              {won(selected.netPnl)}
-            </div>
+            <div className={`mb-4 text-3xl font-semibold ${selected.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(selected.netPnl)}</div>
             <div className="mb-6 text-sm text-[#8b95a5]">ROI {roi(selected) == null ? "—" : `${won(roi(selected) || 0)}%`}</div>
-
             <dl className="mb-6 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-[#8b95a5]">Entry</dt>
-                <dd>{selected.openAvgPx ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[#8b95a5]">Exit</dt>
-                <dd>{selected.closeAvgPx ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[#8b95a5]">Size</dt>
-                <dd>{selected.size ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[#8b95a5]">Lev</dt>
-                <dd>{selected.leverage ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[#8b95a5]">Fee</dt>
-                <dd>{won(selected.fee)}</dd>
-              </div>
-              <div>
-                <dt className="text-[#8b95a5]">Funding</dt>
-                <dd>{won(selected.fundingFee)}</dd>
-              </div>
+              <div><dt className="text-[#8b95a5]">Entry</dt><dd>{selected.openAvgPx ?? "—"}</dd></div>
+              <div><dt className="text-[#8b95a5]">Exit</dt><dd>{selected.closeAvgPx ?? "—"}</dd></div>
+              <div><dt className="text-[#8b95a5]">Size</dt><dd>{selected.size ?? "—"}</dd></div>
+              <div><dt className="text-[#8b95a5]">Lev</dt><dd>{selected.leverage ?? "—"}</dd></div>
+              <div><dt className="text-[#8b95a5]">Fee</dt><dd>{won(selected.fee)}</dd></div>
+              <div><dt className="text-[#8b95a5]">Funding</dt><dd>{won(selected.fundingFee)}</dd></div>
             </dl>
-
             <label className="mb-3 block text-sm">
               <span className="text-[#8b95a5]">별점</span>
               <div className="mt-1 flex gap-1">
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setDraft((d) => ({ ...d, rating: n }))}
-                    className={n <= draft.rating ? "text-[#f0c674]" : "text-[#2a313c]"}
-                  >
-                    ★
-                  </button>
+                  <button key={n} type="button" onClick={() => setDraft((d) => ({ ...d, rating: n }))} className={n <= draft.rating ? "text-[#f0c674]" : "text-[#2a313c]"}>★</button>
                 ))}
               </div>
             </label>
-
             <label className="mb-3 block text-sm">
               <span className="text-[#8b95a5]">태그</span>
-              <input
-                className="mt-1 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2"
-                value={draft.tags}
-                onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))}
-                placeholder="sweep, fomo"
-              />
+              <input className="mt-1 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2" value={draft.tags} onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))} />
             </label>
-
             <label className="mb-4 block text-sm">
               <span className="text-[#8b95a5]">메모</span>
-              <textarea
-                className="mt-1 h-28 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2"
-                value={draft.memo}
-                onChange={(e) => setDraft((d) => ({ ...d, memo: e.target.value }))}
-              />
+              <textarea className="mt-1 h-28 w-full rounded border border-[#2a313c] bg-transparent px-2 py-2" value={draft.memo} onChange={(e) => setDraft((d) => ({ ...d, memo: e.target.value }))} />
             </label>
-
-            <button onClick={saveMeta} className="w-full rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">
-              저장
-            </button>
+            <button onClick={saveMeta} className="w-full rounded-lg bg-[#e8edf4] px-3 py-2 text-[#0b0d10]">저장</button>
           </aside>
         </div>
       ) : null}
