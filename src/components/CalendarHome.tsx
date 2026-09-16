@@ -4,31 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { daysInMonth, kstDateKey } from "@/lib/kst";
 import type { DayStats, Trade } from "@/lib/types";
+import HoverAreaChart from "@/components/HoverAreaChart";
 
-function won(n: number, digits = 2) {
+function won(n: number) {
   const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toLocaleString(undefined, { maximumFractionDigits: digits })}`;
-}
-
-function tickerOf(instId: string) {
-  return instId.replace("-SWAP", "").replace("-USDT", "USDT").replace(/-/g, "");
-}
-
-function hhmm(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Seoul",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
+  return `${sign}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function weekday(dateKst: string) {
   const d = new Date(`${dateKst}T12:00:00+09:00`);
-  return ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
 }
 
 function mondayOf(dateKst: string) {
@@ -40,14 +25,6 @@ function mondayOf(dateKst: string) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const da = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${da}`;
-}
-
-function roi(t: Trade) {
-  if (t.openAvgPx && t.size && t.leverage) {
-    const margin = (t.size * t.openAvgPx) / t.leverage;
-    if (margin) return (t.netPnl / margin) * 100;
-  }
-  return null;
 }
 
 function enrich(list: Trade[]) {
@@ -74,17 +51,27 @@ function MiniCurve({ trades }: { trades: Trade[] }) {
   const coords = pts.map((v, i) => {
     const x = (i / Math.max(pts.length - 1, 1)) * (w - 4) + 2;
     const y = h - 6 - ((v - min) / span) * (h - 12);
-    return { x, y, v };
+    return { x, y };
   });
   const d = coords.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const last = coords[coords.length - 1];
   const zeroY = h - 6 - ((0 - min) / span) * (h - 12);
   const area = `${d} L${last.x},${zeroY} L${coords[0].x},${zeroY} Z`;
-  const up = (last?.v ?? 0) >= 0;
+  const up = (pts[pts.length - 1] ?? 0) >= 0;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-16 w-28">
+      <defs>
+        <linearGradient id="miniUp" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3dd68c" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#3dd68c" stopOpacity="0.02" />
+        </linearGradient>
+        <linearGradient id="miniDn" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="#f07178" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#f07178" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
       <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke="#2a313c" />
-      <path d={area} fill={up ? "#3dd68c22" : "#f0717822"} />
+      <path d={area} fill={up ? "url(#miniUp)" : "url(#miniDn)"} />
       <path d={d} fill="none" stroke={up ? "#3dd68c" : "#f07178"} strokeWidth="1.6" />
     </svg>
   );
@@ -95,7 +82,7 @@ function Stat({ k, v, good }: { k: string; v: string; good?: number }) {
   return (
     <div>
       <div className="text-[11px] text-[#8b95a5]">{k}</div>
-      <div className={`font-medium ${color}`}>{v}</div>
+      <div className={`text-sm font-medium ${color}`}>{v}</div>
     </div>
   );
 }
@@ -104,20 +91,24 @@ export default function CalendarHome() {
   const today = kstDateKey();
   const [days, setDays] = useState<DayStats[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [equityNow, setEquityNow] = useState<number | null>(null);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [open, setOpen] = useState<string>(today);
   const [mode, setMode] = useState<"day" | "week">("day");
+  const [chartOpen, setChartOpen] = useState(true);
   const [syncMsg, setSyncMsg] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
 
   async function reload() {
-    const [ov, tr] = await Promise.all([
+    const [ov, tr, ac] = await Promise.all([
       fetch("/api/overview").then((r) => r.json()),
       fetch("/api/trades").then((r) => r.json()),
+      fetch("/api/account").then((r) => r.json()).catch(() => ({ equityUsd: null })),
     ]);
     const list: DayStats[] = ov.days || [];
     setDays(list);
     setTrades(tr.trades || []);
+    setEquityNow(typeof ac.equityUsd === "number" ? ac.equityUsd : null);
     if (list.length) {
       const last = list[list.length - 1].dateKst;
       setMonth(last.slice(0, 7));
@@ -157,6 +148,21 @@ export default function CalendarHome() {
   const pad = first.getDay();
   const statsMap = useMemo(() => new Map(days.map((d) => [d.dateKst, d])), [days]);
 
+  const equityPoints = useMemo(() => {
+    let cum = 0;
+    const rows = days.map((d) => {
+      cum += d.netPnl;
+      return { dateKst: d.dateKst, cum };
+    });
+    const total = cum;
+    return rows.map((r) => ({
+      label: r.dateKst,
+      value: equityNow != null ? equityNow - (total - r.cum) : r.cum,
+    }));
+  }, [days, equityNow]);
+
+  const seedStart = equityPoints.length ? equityPoints[0].value : 0;
+
   const weeks = useMemo(() => {
     const map = new Map<string, DayStats[]>();
     for (const d of monthDays) {
@@ -185,7 +191,7 @@ export default function CalendarHome() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setSyncMsg(json.error || `${date} 실패`);
+        setSyncMsg(json.error || `${date} failed`);
         setSyncBusy(false);
         return;
       }
@@ -193,7 +199,7 @@ export default function CalendarHome() {
       added += json.synced || 0;
     }
     setSyncBusy(false);
-    setSyncMsg(`${ok}일 완료 · ${added}건`);
+    setSyncMsg(`${ok} days · ${added} trades`);
     await reload();
   }
 
@@ -219,27 +225,23 @@ export default function CalendarHome() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-[#8b95a5]">Day View</p>
           <h1 className="mt-1 text-3xl font-semibold">
-            {y}년 {mo}월
+            {y}-{String(mo).padStart(2, "0")}
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setChartOpen((v) => !v)}
+            className="rounded-lg border border-[#2a313c] bg-[#14181e] px-3 py-2 text-sm"
+          >
+            {chartOpen ? "Hide equity" : "Show equity"}
+          </button>
           <div className="flex rounded-lg border border-[#2a313c] p-1">
-            <button
-              onClick={() => setMode("day")}
-              className={`rounded px-3 py-1 text-sm ${mode === "day" ? "bg-[#e8edf4] text-[#0b0d10]" : ""}`}
-            >
-              Day
-            </button>
-            <button
-              onClick={() => setMode("week")}
-              className={`rounded px-3 py-1 text-sm ${mode === "week" ? "bg-[#e8edf4] text-[#0b0d10]" : ""}`}
-            >
-              Week
-            </button>
+            <button onClick={() => setMode("day")} className={`rounded px-3 py-1 text-sm ${mode === "day" ? "bg-[#e8edf4] text-[#0b0d10]" : ""}`}>Day</button>
+            <button onClick={() => setMode("week")} className={`rounded px-3 py-1 text-sm ${mode === "week" ? "bg-[#e8edf4] text-[#0b0d10]" : ""}`}>Week</button>
           </div>
           <select
             value={month}
@@ -248,21 +250,32 @@ export default function CalendarHome() {
           >
             {months.length === 0 ? <option value={today.slice(0, 7)}>{today.slice(0, 7)}</option> : null}
             {months.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
+              <option key={v} value={v}>{v}</option>
             ))}
           </select>
-          <button
-            onClick={syncMonth}
-            disabled={syncBusy}
-            className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm text-[#0b0d10] disabled:opacity-50"
-          >
-            {syncBusy ? "동기화 중…" : "이번 달 동기화"}
+          <button onClick={syncMonth} disabled={syncBusy} className="rounded-lg bg-[#e8edf4] px-4 py-2 text-sm text-[#0b0d10] disabled:opacity-50">
+            {syncBusy ? "Syncing…" : "Sync month"}
           </button>
         </div>
       </div>
       {syncMsg ? <p className="mb-4 text-sm text-[#f0c674]">{syncMsg}</p> : null}
+
+      {chartOpen ? (
+        <section className="mb-6 rounded-xl border border-[#2a313c] bg-[#14181e] p-4">
+          <div className="mb-1 flex items-baseline justify-between">
+            <div className="text-sm text-[#8b95a5]">Equity</div>
+            <div className="text-sm">
+              {equityNow != null ? won(equityNow) : equityPoints.length ? won(equityPoints[equityPoints.length - 1].value) : "—"}
+            </div>
+          </div>
+          <HoverAreaChart points={equityPoints} baseline={seedStart} />
+          <p className="mt-1 text-[11px] text-[#8b95a5]">
+            {equityNow != null
+              ? "Hover a day for estimated balance. Reconstructed from current OKX equity minus later realized PnL."
+              : "OKX equity unavailable. Showing cumulative realized PnL instead."}
+          </p>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_240px]">
         <div className="space-y-3">
@@ -276,13 +289,8 @@ export default function CalendarHome() {
                 const extra = enrich(tradesW);
                 return (
                   <section key={wk} className="overflow-hidden rounded-xl border border-[#2a313c] bg-[#14181e]">
-                    <button
-                      onClick={() => setOpen(expanded ? "" : wk)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                    >
-                      <span className="font-medium">
-                        {expanded ? "▾" : "▸"} 주 {wk} ~
-                      </span>
+                    <button onClick={() => setOpen(expanded ? "" : wk)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+                      <span className="font-medium">{expanded ? "▾" : "▸"} Week of {wk}</span>
                       <span className={net >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}>Net {won(net)}</span>
                     </button>
                     {expanded ? (
@@ -291,13 +299,11 @@ export default function CalendarHome() {
                           <Stat k="Days" v={String(list.length)} />
                           <Stat k="Trades" v={String(n)} />
                           <Stat k="Wins" v={String(wins)} />
-                          <Stat k="PF" v={extra.pf == null ? "—" : extra.pf === Infinity ? "Inf" : extra.pf.toFixed(2)} />
+                          <Stat k="Profit Factor" v={extra.pf == null ? "—" : extra.pf === Infinity ? "Inf" : extra.pf.toFixed(2)} />
                         </div>
                         {list.map((d) => (
                           <Link key={d.dateKst} href={`/journal/${d.dateKst}`} className="flex justify-between border-t border-[#2a313c] py-2 text-sm">
-                            <span>
-                              {weekday(d.dateKst)} {d.dateKst}
-                            </span>
+                            <span>{weekday(d.dateKst)} {d.dateKst}</span>
                             <span className={d.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}>{won(d.netPnl)}</span>
                           </Link>
                         ))}
@@ -313,24 +319,18 @@ export default function CalendarHome() {
                 const pos = st.netPnl >= 0;
                 return (
                   <section key={st.dateKst} className="overflow-hidden rounded-xl border border-[#2a313c] bg-[#14181e]">
-                    <button
-                      onClick={() => setOpen(expanded ? "" : st.dateKst)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                    >
+                    <button onClick={() => setOpen(expanded ? "" : st.dateKst)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
                       <div className="flex items-center gap-3">
                         <span className="text-[#8b95a5]">{expanded ? "▾" : "▸"}</span>
-                        <span className="font-medium">
-                          {weekday(st.dateKst)} {st.dateKst.slice(8, 10)}일
-                        </span>
-                        <span className="text-xs text-[#8b95a5]">{st.dateKst}</span>
+                        <span className="font-medium">{weekday(st.dateKst)}, {st.dateKst}</span>
                       </div>
-                      <span className={`font-medium ${pos ? "text-[#3dd68c]" : "text-[#f07178]"}`}>Net {won(st.netPnl)}</span>
+                      <span className={`font-medium ${pos ? "text-[#3dd68c]" : "text-[#f07178]"}`}>Net P&L {won(st.netPnl)}</span>
                     </button>
                     {expanded ? (
                       <div className="border-t border-[#2a313c] px-4 pb-4 pt-3">
-                        <div className="mb-4 flex flex-wrap items-center gap-6">
+                        <div className="mb-3 flex flex-wrap items-center gap-6">
                           <MiniCurve trades={[...list].reverse()} />
-                          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+                          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
                             <Stat k="Total Trades" v={String(st.trades)} />
                             <Stat k="Gross P&L" v={won(extra.gross)} good={extra.gross} />
                             <Stat k="Winners / Losers" v={`${st.wins} / ${st.losses}`} />
@@ -341,47 +341,9 @@ export default function CalendarHome() {
                             <Stat k="Net P&L" v={won(st.netPnl)} good={st.netPnl} />
                           </div>
                         </div>
-                        <div className="overflow-x-auto rounded-lg border border-[#2a313c]">
-                          <table className="w-full min-w-[720px] text-left text-sm">
-                            <thead className="text-xs text-[#8b95a5]">
-                              <tr>
-                                {["Open time", "Ticker", "Side", "Instrument", "Net P&L", "Net ROI"].map((h) => (
-                                  <th key={h} className="px-3 py-2 font-medium">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {list.length === 0 ? (
-                                <tr>
-                                  <td colSpan={6} className="px-3 py-6 text-center text-[#8b95a5]">매매 없음</td>
-                                </tr>
-                              ) : (
-                                list.map((t) => {
-                                  const r = roi(t);
-                                  return (
-                                    <tr key={t.id} className="border-t border-[#2a313c]">
-                                      <td className="px-3 py-2 whitespace-nowrap text-[#8b95a5]">{hhmm(t.closedAt)}</td>
-                                      <td className="px-3 py-2">
-                                        <Link href={`/journal/${t.dateKst}`} className="rounded-full bg-[#1b2028] px-2 py-0.5 text-xs">
-                                          {tickerOf(t.instId)}
-                                        </Link>
-                                      </td>
-                                      <td className="px-3 py-2 uppercase">{t.side}</td>
-                                      <td className="px-3 py-2 text-[#8b95a5]">{tickerOf(t.instId)}</td>
-                                      <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>{won(t.netPnl)}</td>
-                                      <td className={`px-3 py-2 ${t.netPnl >= 0 ? "text-[#3dd68c]" : "text-[#f07178]"}`}>
-                                        {r == null ? "—" : `${won(r)}%`}
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="mt-3">
-                          <Link href={`/journal/${st.dateKst}`} className="text-xs text-[#8b95a5] underline">이 날 상세</Link>
-                        </div>
+                        <Link href={`/journal/${st.dateKst}`} className="text-xs text-[#8b95a5] underline">
+                          Day details
+                        </Link>
                       </div>
                     ) : null}
                   </section>
@@ -390,12 +352,10 @@ export default function CalendarHome() {
         </div>
 
         <aside className="h-fit rounded-xl border border-[#2a313c] bg-[#14181e] p-3">
-          <div className="mb-2 text-center text-sm">
-            {y}년 {mo}월
-          </div>
+          <div className="mb-2 text-center text-sm">{y}-{String(mo).padStart(2, "0")}</div>
           <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[#8b95a5]">
-            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-              <div key={d}>{d}</div>
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <div key={`${d}${i}`}>{d}</div>
             ))}
             {Array.from({ length: pad }).map((_, i) => (
               <div key={`e${i}`} />
