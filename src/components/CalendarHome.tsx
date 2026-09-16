@@ -285,14 +285,21 @@ export default function CalendarHome() {
           </button>
           <div className="flex items-center gap-2">
             {st.dateKst === today ? (
-              <button
-                onClick={syncToday}
-                disabled={dayBusy || syncBusy}
-                className="rounded-full bg-[#6d5cff] px-3 py-1 text-xs text-white disabled:opacity-50"
-              >
-                {dayBusy ? "Sync…" : "Start my day"}
-              </button>
-            ) : null}
+  <button
+    onClick={syncToday}
+    disabled={dayBusy || syncBusy}
+    aria-label="sync today"
+    className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6d5cff] text-white disabled:opacity-50"
+  >
+    {dayBusy ? (
+      <span className="text-[10px]">…</span>
+    ) : (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    )}
+  </button>
+) : null}
             <button
               onClick={() => openNote(st.dateKst)}
               className="rounded-full border border-[#e5e7eb] px-3 py-1 text-xs text-[#6b7280]"
