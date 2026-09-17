@@ -151,17 +151,19 @@ export default function CalendarHome() {
 
   return (
     <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-8">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-[#6b7280]">IMGBB Journal</p>
-          <h1 className="mt-1 text-3xl font-semibold">Day View</h1>
+            <div className="mb-3 grid items-end gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-sm text-[#6b7280]">IMGBB Journal</p>
+            <h1 className="mt-1 text-3xl font-semibold">Day View</h1>
+          </div>
+          <button onClick={syncToday} disabled={syncBusy} className="rounded-lg bg-[#6d5cff] px-4 py-2 text-sm text-white disabled:opacity-50">
+            {syncBusy ? "IMGBB…" : "IMGBB"}
+          </button>
         </div>
-        <button onClick={syncToday} disabled={syncBusy} className="rounded-lg bg-[#6d5cff] px-4 py-2 text-sm text-white disabled:opacity-50">
-          {syncBusy ? "IMGBB…" : "IMGBB"}
-        </button>
+        <div />
       </div>
       {syncMsg ? <p className="mb-4 text-sm text-[#6d5cff]">{syncMsg}</p> : null}
-
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
         <div className="min-w-0 space-y-3">
           {cards.map((st) => {

@@ -5,6 +5,33 @@ import { money } from "@/lib/format";
 
 type Pt = { label: string; value: number };
 
+function niceStep(span: number) {
+  const raw = span / 4;
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+  const n = raw / pow;
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return step * pow;
+}
+
+function niceTicks(min: number, max: number) {
+  const lo = Math.min(min, 0);
+  const hi = Math.max(max, 0);
+  const step = niceStep(hi - lo || 1);
+  const start = Math.floor(lo / step) * step;
+  const end = Math.ceil(hi / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v <= end + step * 0.01; v += step) ticks.push(Number(v.toFixed(8)));
+  return { ticks, min: start, max: end };
+}
+
+function lab(v: number) {
+  const sign = v < 0 ? "-" : "";
+  const a = Math.abs(v);
+  if (a >= 1000000) return `${sign}$${(a / 1000000).toFixed(a >= 10000000 ? 0 : 1)}m`;
+  if (a >= 1000) return `${sign}$${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k`;
+  return `${sign}$${a.toFixed(0)}`;
+}
+
 export default function HoverAreaChart({
   points,
   baseline = 0,
@@ -18,12 +45,13 @@ export default function HoverAreaChart({
   const [hover, setHover] = useState<number | null>(null);
   const w = 400;
   const h = height;
-  const pad = 8;
+  const pad = 10;
 
   const layout = useMemo(() => {
     if (!points.length) return null;
-    const min = Math.min(baseline, ...points.map((p) => p.value));
-    const max = Math.max(baseline, ...points.map((p) => p.value));
+    const rawMin = Math.min(baseline, ...points.map((p) => p.value));
+    const rawMax = Math.max(baseline, ...points.map((p) => p.value));
+    const { ticks, min, max } = niceTicks(rawMin, rawMax);
     const span = Math.max(1e-9, max - min);
     const coords = points.map((p, i) => {
       const x = pad + (i / Math.max(points.length - 1, 1)) * (w - pad * 2);
@@ -33,33 +61,28 @@ export default function HoverAreaChart({
     const zeroY = pad + ((max - baseline) / span) * (h - pad * 2);
     const line = coords.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
     const area = `${line} L${coords[coords.length - 1].x},${zeroY} L${coords[0].x},${zeroY} Z`;
-    const ticks = [max, (max + min) / 2, min].map((v) => ({
-      v,
-      y: pad + ((max - v) / span) * (h - pad * 2),
-    }));
-    return { coords, zeroY, line, area, ticks };
+    return {
+      coords,
+      zeroY,
+      line,
+      area,
+      ticks: ticks.map((v) => ({ v, y: pad + ((max - v) / span) * (h - pad * 2) })),
+    };
   }, [points, baseline, h]);
 
   if (!layout) return <p className="py-8 text-center text-sm text-[#6b7280]">no data</p>;
   const hi = hover == null ? null : layout.coords[hover];
 
-  function lab(v: number) {
-    const sign = v < 0 ? "-" : "";
-    const a = Math.abs(v);
-    if (a >= 1000) return `${sign}$${(a / 1000).toFixed(1)}k`;
-    return `${sign}$${a.toFixed(0)}`;
-  }
-
   return (
     <div className="flex items-stretch gap-2">
-      <div className="relative w-12 shrink-0 text-right text-[11px] font-semibold leading-none text-[#4b5563]" style={{ height }}>
+      <div className="relative w-14 shrink-0 text-right text-xs font-semibold text-[#4b5563]" style={{ height }}>
         {layout.ticks.map((t) => (
-          <div key={t.v} className="absolute right-0 -translate-y-1/2" style={{ top: t.y }}>
+          <div key={t.v} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: t.y }}>
             {lab(t.v)}
           </div>
         ))}
       </div>
-      <div className="relative min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1 overflow-hidden">
         <svg
           viewBox={`0 0 ${w} ${h}`}
           style={{ height, width: "100%" }}
