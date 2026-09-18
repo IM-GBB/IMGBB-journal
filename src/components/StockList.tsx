@@ -35,6 +35,8 @@ export default function StockList() {
     setQ(input.trim());
   }
 
+  const headers = ["종목명", "원칙달성", "구분", "매매일", "매매비중", "수익률", "차트", "심리상태", "최종진단"];
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <p className="text-sm text-[#6b7280]">Stock Journal</p>
@@ -59,7 +61,7 @@ export default function StockList() {
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="text-[#6b7280]">
             <tr>
-              {[“종목명”, “원칙달성”, “구분”, “매매일”, “매매비중”, “수익률”, “차트”, “심리상태”, “최종진단”].map((h) => (
+              {headers.map((h) => (
                 <th key={h} className="px-3 py-2 font-medium">{h}</th>
               ))}
             </tr>
