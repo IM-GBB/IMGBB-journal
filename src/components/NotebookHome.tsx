@@ -90,7 +90,6 @@ export default function NotebookHome() {
               );
             })}
           </div>
-          <p className="mt-3 text-[11px] text-[#6b7280]">연보라 = 노트 있는 날</p>
         </aside>
 
         <article className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
@@ -107,17 +106,16 @@ export default function NotebookHome() {
               {selectedStats.trades} trades · wr {(selectedStats.winRate * 100).toFixed(0)}% · fees {money(selectedStats.fee)}
             </p>
           ) : null}
-          <p className="mt-4 whitespace-pre-wrap text-sm">{selectedNote || "이 날 노트가 없습니다."}</p>
+          <p className="mt-4 whitespace-pre-wrap text-sm">{selectedNote || ""}</p>
           <a href="/" className="mt-3 inline-block text-xs text-[#6d5cff]">Open in Day View</a>
         </article>
       </div>
 
       <section className="mt-10">
         <h2 className="text-xl font-semibold">Memos</h2>
-        <p className="mt-1 text-sm text-[#6b7280]">대시보드 포스트잇 전체. 최신순.</p>
         <div className="mt-4 overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
           {slice.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-[#6b7280]">메모 없음</p>
+            <p className="px-4 py-6 text-sm text-[#6b7280]"> </p>
           ) : (
             slice.map((m) => (
               <article key={m.id} className="border-t border-[#f3f4f6] px-4 py-3 first:border-t-0">
