@@ -41,7 +41,6 @@ export default function DashboardHome() {
   }, []);
 
   const rebateMap = useMemo(() => new Map(rebates.map((r) => [r.dateKst, r.amount])), [rebates]);
-
   const series = useMemo(() => {
     let cum = 0;
     const daily = [{ label: "start", value: 0 }].concat(
@@ -75,7 +74,6 @@ export default function DashboardHome() {
   const allTrades = days.reduce((s, d) => s + d.trades, 0);
   const allRebate = rebates.reduce((s, r) => s + r.amount, 0);
   const winDays = days.filter((d) => d.netPnl > 0).length;
-
   const symbols = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of trades) {
@@ -84,7 +82,6 @@ export default function DashboardHome() {
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [trades]);
-
   const pins = memos.slice(0, 4);
 
   async function saveMotto() {
@@ -96,7 +93,6 @@ export default function DashboardHome() {
     setMotto(j.text || mottoDraft);
     setMottoEdit(false);
   }
-
   async function addMemo() {
     const text = draft.trim();
     if (!text) return;
@@ -109,7 +105,6 @@ export default function DashboardHome() {
     setDraft("");
     setAdding(false);
   }
-
   async function saveMemo() {
     if (!editId) return;
     const j = await fetch("/api/memos", {
@@ -120,7 +115,6 @@ export default function DashboardHome() {
     if (j.memo) setMemos((prev) => prev.map((m) => (m.id === editId ? j.memo : m)));
     setEditId(null);
   }
-
   async function removeMemo(id: string) {
     await fetch(`/api/memos?id=${id}`, { method: "DELETE" });
     setMemos((prev) => prev.filter((m) => m.id !== id));
@@ -134,20 +128,16 @@ export default function DashboardHome() {
       <section className="mt-6">
         {mottoEdit ? (
           <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
-            <textarea
-              className="h-24 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-lg font-semibold"
-              value={mottoDraft}
-              onChange={(e) => setMottoDraft(e.target.value)}
-            />
+            <textarea className="h-24 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-lg font-semibold" value={mottoDraft} onChange={(e) => setMottoDraft(e.target.value)} />
             <div className="mt-2 flex justify-end gap-2">
               <button onClick={() => setMottoEdit(false)} className="px-3 py-1 text-sm text-[#6b7280]">Cancel</button>
               <button onClick={saveMotto} className="rounded-lg bg-[#6d5cff] px-3 py-1 text-sm text-white">Save</button>
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => { setMottoDraft(motto); setMottoEdit(true); }} className="w-full text-left">
-            <p className="text-2xl font-bold leading-snug text-[#111827] md:text-3xl">
-              {motto || ""}
+          <button type="button" onClick={() => { setMottoDraft(motto); setMottoEdit(true); }} className="min-h-[56px] w-full text-left">
+            <p className={`text-2xl font-bold leading-snug md:text-3xl ${motto ? "text-[#111827]" : "text-[#d1d5db]"}`}>
+              {motto || "…"}
             </p>
           </button>
         )}
@@ -158,9 +148,7 @@ export default function DashboardHome() {
           <button type="button" onClick={() => setMemoOpen((v) => !v)} className="text-lg font-semibold">
             Memo {memoOpen ? "▾" : "▸"}
           </button>
-          <button onClick={() => { setAdding(true); setMemoOpen(true); }} className="rounded-full border border-[#e5e7eb] bg-white px-3 py-1 text-xs text-[#6b7280]">
-            Add memo
-          </button>
+          <button onClick={() => { setAdding(true); setMemoOpen(true); }} className="rounded-full border border-[#e5e7eb] bg-white px-3 py-1 text-xs text-[#6b7280]">Add memo</button>
         </div>
         {memoOpen ? (
           <>
@@ -219,13 +207,7 @@ export default function DashboardHome() {
           </div>
           <div className="flex rounded-lg border border-[#e5e7eb] p-1">
             {(["D", "W", "M", "Y"] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`rounded px-3 py-1 text-sm ${range === r ? "bg-[#efeaff] text-[#5b45e0]" : "text-[#6b7280]"}`}
-              >
-                {r}
-              </button>
+              <button key={r} onClick={() => setRange(r)} className={`rounded px-3 py-1 text-sm ${range === r ? "bg-[#efeaff] text-[#5b45e0]" : "text-[#6b7280]"}`}>{r}</button>
             ))}
           </div>
         </div>

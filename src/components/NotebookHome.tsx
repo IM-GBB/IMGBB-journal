@@ -16,6 +16,7 @@ export default function NotebookHome() {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [picked, setPicked] = useState(today);
   const [page, setPage] = useState(0);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -114,24 +115,30 @@ export default function NotebookHome() {
       <section className="mt-10">
         <h2 className="text-xl font-semibold">Memos</h2>
         <div className="mt-4 overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
-          {slice.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-[#6b7280]"> </p>
-          ) : (
-            slice.map((m) => (
-              <article key={m.id} className="border-t border-[#f3f4f6] px-4 py-3 first:border-t-0">
-                <div className="text-xs text-[#9ca3af]">
-                  {new Date(m.createdAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{m.body}</p>
+          {slice.map((m) => {
+            const open = openId === m.id;
+            return (
+              <article key={m.id} className="border-t border-[#f3f4f6] first:border-t-0">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(open ? null : m.id)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm"
+                >
+                  <span className="text-[#6b7280]">
+                    {new Date(m.createdAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                  </span>
+                  <span className="text-[#9ca3af]">{open ? "▾" : "▸"}</span>
+                </button>
+                {open ? <p className="whitespace-pre-wrap px-4 pb-3 text-sm">{m.body}</p> : null}
               </article>
-            ))
-          )}
+            );
+          })}
         </div>
         {pages > 1 ? (
           <div className="mt-3 flex items-center justify-center gap-3 text-sm">
-            <button disabled={page <= 0} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-40">이전</button>
+            <button disabled={page <= 0} onClick={() => { setPage((p) => p - 1); setOpenId(null); }} className="disabled:opacity-40">이전</button>
             <span>{page + 1} / {pages}</span>
-            <button disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-40">다음</button>
+            <button disabled={page >= pages - 1} onClick={() => { setPage((p) => p + 1); setOpenId(null); }} className="disabled:opacity-40">다음</button>
           </div>
         ) : null}
       </section>
