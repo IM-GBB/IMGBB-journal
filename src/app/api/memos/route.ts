@@ -12,10 +12,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as { body?: string };
-  const text = String(body.body ?? "").trim();
+  const text = String(body.body ?? "").replace(/<[^>]+>/g, "").trim();
   if (!text) return NextResponse.json({ error: "내용 필요" }, { status: 400 });
   try {
-    const memo = await addSticky(text);
+    const memo = await addSticky(String(body.body ?? ""));
     return NextResponse.json({ memo });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "failed";
@@ -24,10 +24,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = (await req.json()) as { id?: string; body?: string };
+  const body = (await req.json()) as { id?: string; body?: string; pinned?: boolean };
   if (!body.id) return NextResponse.json({ error: "id 필요" }, { status: 400 });
   try {
-    const memo = await updateSticky(body.id, String(body.body ?? ""));
+    const memo = await updateSticky(body.id, { body: body.body, pinned: body.pinned });
     if (!memo) return NextResponse.json({ error: "없음" }, { status: 404 });
     return NextResponse.json({ memo });
   } catch (e) {
