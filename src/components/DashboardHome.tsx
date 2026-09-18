@@ -138,7 +138,6 @@ export default function DashboardHome() {
               className="h-24 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-lg font-semibold"
               value={mottoDraft}
               onChange={(e) => setMottoDraft(e.target.value)}
-              placeholder="좌우명을 적어."
             />
             <div className="mt-2 flex justify-end gap-2">
               <button onClick={() => setMottoEdit(false)} className="px-3 py-1 text-sm text-[#6b7280]">Cancel</button>
@@ -148,9 +147,8 @@ export default function DashboardHome() {
         ) : (
           <button type="button" onClick={() => { setMottoDraft(motto); setMottoEdit(true); }} className="w-full text-left">
             <p className="text-2xl font-bold leading-snug text-[#111827] md:text-3xl">
-              {motto || "좌우명을 눌러서 적어."}
+              {motto || ""}
             </p>
-            <p className="mt-1 text-xs text-[#9ca3af]">클릭하면 수정</p>
           </button>
         )}
       </section>
@@ -168,7 +166,7 @@ export default function DashboardHome() {
           <>
             {adding ? (
               <div className="mb-3 rounded-xl border border-[#e5e7eb] bg-white p-3">
-                <textarea className="h-20 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-sm" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="메모" />
+                <textarea className="h-20 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-sm" value={draft} onChange={(e) => setDraft(e.target.value)} />
                 <div className="mt-2 flex justify-end gap-2">
                   <button onClick={() => setAdding(false)} className="text-sm text-[#6b7280]">Cancel</button>
                   <button onClick={addMemo} className="rounded-lg bg-[#6d5cff] px-3 py-1 text-sm text-white">Save</button>
@@ -198,9 +196,6 @@ export default function DashboardHome() {
                 </article>
               ))}
             </div>
-            {memos.length > 4 ? (
-              <p className="mt-2 text-xs text-[#6b7280]">나머지 {memos.length - 4}개는 Notebook · Memos에 보관</p>
-            ) : null}
           </>
         ) : null}
       </section>
