@@ -6,22 +6,37 @@ import HoverAreaChart from "@/components/HoverAreaChart";
 import { money, tickerOf } from "@/lib/format";
 
 type Range = "D" | "W" | "M" | "Y";
+type Memo = { id: string; body: string; createdAt: string };
+const COLORS = ["#fef3c7", "#fce7f3", "#dbeafe", "#dcfce7"];
 
 export default function DashboardHome() {
   const [days, setDays] = useState<DayStats[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [rebates, setRebates] = useState<{ dateKst: string; amount: number }[]>([]);
   const [range, setRange] = useState<Range>("D");
+  const [motto, setMotto] = useState("");
+  const [mottoEdit, setMottoEdit] = useState(false);
+  const [mottoDraft, setMottoDraft] = useState("");
+  const [memos, setMemos] = useState<Memo[]>([]);
+  const [memoOpen, setMemoOpen] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
 
   useEffect(() => {
     Promise.all([
       fetch("/api/overview").then((r) => r.json()),
       fetch("/api/trades").then((r) => r.json()),
       fetch("/api/rebates").then((r) => r.json()).catch(() => ({ rebates: [] })),
-    ]).then(([ov, tr, rb]) => {
+      fetch("/api/motto").then((r) => r.json()).catch(() => ({ text: "" })),
+      fetch("/api/memos").then((r) => r.json()).catch(() => ({ memos: [] })),
+    ]).then(([ov, tr, rb, mt, mm]) => {
       setDays(ov.days || []);
       setTrades(tr.trades || []);
       setRebates(rb.rebates || []);
+      setMotto(mt.text || "");
+      setMemos(mm.memos || []);
     });
   }, []);
 
@@ -36,7 +51,6 @@ export default function DashboardHome() {
       })
     );
     if (range === "D") return daily;
-
     const m = new Map<string, { label: string; value: number }>();
     for (const p of daily.slice(1)) {
       let key = p.label;
@@ -71,10 +85,125 @@ export default function DashboardHome() {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [trades]);
 
+  const pins = memos.slice(0, 4);
+
+  async function saveMotto() {
+    const j = await fetch("/api/motto", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: mottoDraft }),
+    }).then((r) => r.json());
+    setMotto(j.text || mottoDraft);
+    setMottoEdit(false);
+  }
+
+  async function addMemo() {
+    const text = draft.trim();
+    if (!text) return;
+    const j = await fetch("/api/memos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: text }),
+    }).then((r) => r.json());
+    if (j.memo) setMemos((prev) => [j.memo, ...prev]);
+    setDraft("");
+    setAdding(false);
+  }
+
+  async function saveMemo() {
+    if (!editId) return;
+    const j = await fetch("/api/memos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editId, body: editBody }),
+    }).then((r) => r.json());
+    if (j.memo) setMemos((prev) => prev.map((m) => (m.id === editId ? j.memo : m)));
+    setEditId(null);
+  }
+
+  async function removeMemo(id: string) {
+    await fetch(`/api/memos?id=${id}`, { method: "DELETE" });
+    setMemos((prev) => prev.filter((m) => m.id !== id));
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <p className="text-sm text-[#6b7280]">IMGBB Journal</p>
       <h1 className="mt-1 text-3xl font-semibold">Dashboard</h1>
+
+      <section className="mt-6">
+        {mottoEdit ? (
+          <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
+            <textarea
+              className="h-24 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-lg font-semibold"
+              value={mottoDraft}
+              onChange={(e) => setMottoDraft(e.target.value)}
+              placeholder="좌우명을 적어."
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button onClick={() => setMottoEdit(false)} className="px-3 py-1 text-sm text-[#6b7280]">Cancel</button>
+              <button onClick={saveMotto} className="rounded-lg bg-[#6d5cff] px-3 py-1 text-sm text-white">Save</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setMottoDraft(motto); setMottoEdit(true); }} className="w-full text-left">
+            <p className="text-2xl font-bold leading-snug text-[#111827] md:text-3xl">
+              {motto || "좌우명을 눌러서 적어."}
+            </p>
+            <p className="mt-1 text-xs text-[#9ca3af]">클릭하면 수정</p>
+          </button>
+        )}
+      </section>
+
+      <section className="mt-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <button type="button" onClick={() => setMemoOpen((v) => !v)} className="text-lg font-semibold">
+            Memo {memoOpen ? "▾" : "▸"}
+          </button>
+          <button onClick={() => { setAdding(true); setMemoOpen(true); }} className="rounded-full border border-[#e5e7eb] bg-white px-3 py-1 text-xs text-[#6b7280]">
+            Add memo
+          </button>
+        </div>
+        {memoOpen ? (
+          <>
+            {adding ? (
+              <div className="mb-3 rounded-xl border border-[#e5e7eb] bg-white p-3">
+                <textarea className="h-20 w-full rounded-lg border border-[#e5e7eb] px-3 py-2 text-sm" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="메모" />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button onClick={() => setAdding(false)} className="text-sm text-[#6b7280]">Cancel</button>
+                  <button onClick={addMemo} className="rounded-lg bg-[#6d5cff] px-3 py-1 text-sm text-white">Save</button>
+                </div>
+              </div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {pins.map((m, i) => (
+                <article key={m.id} className="min-h-[140px] rounded-md p-3 shadow-sm" style={{ background: COLORS[i % COLORS.length] }}>
+                  {editId === m.id ? (
+                    <>
+                      <textarea className="h-20 w-full bg-transparent text-sm" value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+                      <div className="mt-2 flex gap-2 text-xs">
+                        <button onClick={saveMemo}>저장</button>
+                        <button onClick={() => setEditId(null)}>취소</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="whitespace-pre-wrap text-sm text-[#1f2937]">{m.body}</p>
+                      <div className="mt-3 flex gap-2 text-[11px] text-[#6b7280]">
+                        <button onClick={() => { setEditId(m.id); setEditBody(m.body); }}>수정</button>
+                        <button onClick={() => removeMemo(m.id)}>삭제</button>
+                      </div>
+                    </>
+                  )}
+                </article>
+              ))}
+            </div>
+            {memos.length > 4 ? (
+              <p className="mt-2 text-xs text-[#6b7280]">나머지 {memos.length - 4}개는 Notebook · Memos에 보관</p>
+            ) : null}
+          </>
+        ) : null}
+      </section>
 
       <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card k="Cumulative Net" v={money(last)} good={last} />
