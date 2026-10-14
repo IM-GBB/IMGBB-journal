@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DayStats } from "@/lib/types";
 import { daysInMonth, kstDateKey } from "@/lib/kst";
 import { money, weekday } from "@/lib/format";
+import { NoteHtml } from "@/components/RichText";
 
 type NoteRow = { date: string; note: string };
 type Memo = { id: string; body: string; createdAt: string };
@@ -107,7 +108,7 @@ export default function NotebookHome() {
               {selectedStats.trades} trades · wr {(selectedStats.winRate * 100).toFixed(0)}% · fees {money(selectedStats.fee)}
             </p>
           ) : null}
-          <p className="mt-4 whitespace-pre-wrap text-sm">{selectedNote || ""}</p>
+          <NoteHtml html={selectedNote} className="mt-4 text-sm" />
           <a href="/" className="mt-3 inline-block text-xs text-[#6d5cff]">Open in Day View</a>
         </article>
       </div>
@@ -129,7 +130,7 @@ export default function NotebookHome() {
                   </span>
                   <span className="text-[#9ca3af]">{open ? "▾" : "▸"}</span>
                 </button>
-                {open ? <p className="whitespace-pre-wrap px-4 pb-3 text-sm">{m.body}</p> : null}
+                {open ? <NoteHtml html={m.body} className="px-4 pb-3 text-sm" /> : null}
               </article>
             );
           })}
