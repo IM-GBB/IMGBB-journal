@@ -241,9 +241,9 @@ export default function CalendarHome() {
       </div>
       {noteDate ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setNoteDate(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-medium">Note · {noteDate}</h3>
-            <div className="mt-3"><RichText value={noteText} onChange={setNoteText} /></div>
+            <div className="mt-3"><RichText value={noteText} onChange={setNoteText} allowImages /></div>
             <div className="mt-3 flex justify-end gap-2">
               <button onClick={() => setNoteDate(null)} className="rounded-lg px-3 py-2 text-sm text-[#6b7280]">Cancel</button>
               <button onClick={saveNote} className="rounded-lg bg-[#6d5cff] px-3 py-2 text-sm text-white">Save</button>
