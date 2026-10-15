@@ -106,9 +106,11 @@ export default function CalendarHome() {
     await reload(true);
   }
   async function syncToday() {
-    await syncDates([kstDateKey()]);
-    setMonth(kstDateKey().slice(0, 7));
-    setOpen(kstDateKey());
+    const todayKey = kstDateKey();
+    const prior = days.map((d) => d.dateKst).filter((d) => d < todayKey).sort().at(-1);
+    await syncDates(prior ? [prior, todayKey] : [todayKey]);
+    setMonth(todayKey.slice(0, 7));
+    setOpen(todayKey);
   }
   async function syncMonth() {
     const todayKey = kstDateKey();
